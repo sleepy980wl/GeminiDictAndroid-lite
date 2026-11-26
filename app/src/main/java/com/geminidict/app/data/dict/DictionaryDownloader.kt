@@ -8,6 +8,7 @@ import com.geminidict.app.data.local.entity.DownloadedDictEntity
 import com.geminidict.app.data.security.SecurePrefsManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.Call
@@ -132,6 +133,10 @@ class DictionaryDownloader(
         onProgress: (DownloadProgress) -> Unit,
         allowRetryOn416: Boolean = true
     ) {
+        // Capture the coroutine context here: inside the nested `use {}` blocks
+        // below the CoroutineScope receiver is lost, so `coroutineContext`
+        // is unresolved there (compile error at old line 181).
+        val coroutineContext = currentCoroutineContext()
         val existingBytes = if (partFile.exists()) partFile.length() else 0L
         val resumeLabel = if (existingBytes > 0L) {
             String.format("正在断点续传（已下 %.1f MB）...", existingBytes / (1024.0 * 1024.0))
