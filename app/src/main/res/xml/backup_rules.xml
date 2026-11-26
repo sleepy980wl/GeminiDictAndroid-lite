@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Never back up Keystore-encrypted preferences to another device -->
+    <exclude domain="sharedpref" path="geminidict_secure_prefs.xml" />
+    <exclude domain="sharedpref" path="geminidict_fallback_prefs.xml" />
+</full-backup-content>
