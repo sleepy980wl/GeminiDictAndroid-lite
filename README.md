@@ -48,4 +48,4 @@ gradle assembleDebug
 ```
 
 ### 方式三：GitHub Actions 自动构建 APK
-仓库已内置 `.github/workflows/android-build.yml`（显式配置 JDK 17、Android SDK 35、Gradle 8.9）。推送至 GitHub 后在 **Actions** 页面即可下载自动构建的 `GeminiDict-debug-apk`。
+仓库已内置 `.github/workflows/android-build.yml`（显式配置 JDK 17、Android SDK 35、Gradle 8.9）。推送至 GitHub 后自动运行单元测试并构建，构建成功后直接发布到 **Releases**（只保留最新一版，旧版自动删除），在仓库的 Releases 页下载 APK 即可。

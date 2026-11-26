@@ -7,6 +7,10 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
+# Needed to create/delete releases with the built-in GITHUB_TOKEN.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -46,3 +50,28 @@ jobs:
           name: GeminiDict-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      # Push builds only (not pull requests): publish the APK as a GitHub
+      # Release and delete every older release, so only the latest one stays.
+      - name: Read version
+        id: version
+        if: github.event_name != 'pull_request'
+        run: |
+          VERSION=$(grep -m1 'versionName' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create Release (keep only latest)
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          TAG="v${{ steps.version.outputs.version }}-${{ github.run_number }}"
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -n 1)
+          gh release create "$TAG" "$APK" \
+            --title "GeminiDictAndroid v${{ steps.version.outputs.version }} (build ${{ github.run_number }})" \
+            --notes "自动构建：单元测试通过后的 Debug APK。安装后在设置页填写 Gemini API Key 即可使用 AI 翻译；不填 Key 也可完整离线使用。"
+          # Delete every older release (with its tag) so only the latest remains.
+          for t in $(gh release list --limit 100 --json tagName --jq '.[].tagName' | grep -v "^${TAG}$" || true); do
+            gh release delete "$t" -y --cleanup-tag
+          done
