@@ -56,7 +56,7 @@ class NeuralVoiceDownloader(
 
     fun resolveInstalledVoice(item: NeuralVoiceModelItem): InstalledNeuralVoice? {
         val modelRoot = File(voicesRootDir, item.id)
-        if (!modelRoot.isDirectory) return null
+        if (!modelRoot.isDirectory || !File(modelRoot, ".installed").isFile) return null
         val onnx = findFileRecursively(modelRoot) { it.isFile && it.name.endsWith(".onnx") } ?: return null
         val tokens = findFileRecursively(modelRoot) { it.isFile && it.name == "tokens.txt" } ?: return null
         val espeak = findFileRecursively(modelRoot) { it.isDirectory && it.name == "espeak-ng-data" } ?: return null
@@ -83,7 +83,7 @@ class NeuralVoiceDownloader(
         try {
             downloadWithResume(item, effectiveUrl, partFile, onProgress)
 
-            coroutineContext.ensureActive()
+            currentCoroutineContext().ensureActive()
             onProgress(DownloadProgress(item.id, "importing", -1f, "正在解压神经语音模型（可能需要十几秒）..."))
             if (stagingDir.exists()) stagingDir.deleteRecursively()
             FileInputStream(partFile).use { fis ->
@@ -103,6 +103,7 @@ class NeuralVoiceDownloader(
                 stagingDir.copyRecursively(targetDir, overwrite = true)
                 stagingDir.deleteRecursively()
             }
+            File(targetDir, ".installed").writeText("ok")
             if (partFile.exists()) partFile.delete()
 
             val installed = resolveInstalledVoice(item)
@@ -121,10 +122,6 @@ class NeuralVoiceDownloader(
             throw ce
         } catch (e: Exception) {
             if (stagingDir.exists()) stagingDir.deleteRecursively()
-            // Any targetDir present here is a partial copy from this run
-            // (the previous install was already deleted before the swap),
-            // so remove it instead of letting it masquerade as installed.
-            if (targetDir.exists()) targetDir.deleteRecursively()
             val savedMb = partFile.length() / (1024.0 * 1024.0)
             val resumeHint = if (partFile.length() > 0) {
                 String.format("（已缓存 %.1f MB，重试自动断点续传）", savedMb)
@@ -150,9 +147,6 @@ class NeuralVoiceDownloader(
         onProgress: (DownloadProgress) -> Unit,
         allowRetryOn416: Boolean = true
     ) {
-        // Capture here: inside the nested use{} blocks below the CoroutineScope
-        // receiver is lost, so bare `coroutineContext` is unresolved (compile error).
-        val coroutineContext = currentCoroutineContext()
         val existingBytes = if (partFile.exists()) partFile.length() else 0L
         val resumeLabel = if (existingBytes > 0L) {
             String.format("正在断点续传（已下 %.1f MB）...", existingBytes / (1024.0 * 1024.0))
@@ -197,7 +191,7 @@ class NeuralVoiceDownloader(
                 FileOutputStream(partFile, isPartial).use { output ->
                     val buffer = ByteArray(16 * 1024)
                     while (true) {
-                        coroutineContext.ensureActive()
+                        currentCoroutineContext().ensureActive()
                         val read = input.read(buffer)
                         if (read == -1) break
                         output.write(buffer, 0, read)

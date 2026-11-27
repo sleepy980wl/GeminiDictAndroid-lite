@@ -27,9 +27,6 @@ object FuzzyWordMatcher {
             .split(Regex("""\s+"""))
             .filter { it.isNotBlank() }
         if (tokens.isEmpty()) return ""
-        // Unquoted prefix terms: FTS4 `simple` tokenizer keeps full-width punctuation
-        // (e.g. ECDICT `苹果；苹果树`) inside a token, so a quoted `"苹果"*` never
-        // matches it, while bare `苹果*` does. Verified against SQLite FTS4.
         return tokens.joinToString(" ") { token -> "$token*" }
     }
 

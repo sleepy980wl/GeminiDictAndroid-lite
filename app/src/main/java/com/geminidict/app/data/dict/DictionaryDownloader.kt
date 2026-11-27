@@ -86,7 +86,7 @@ class DictionaryDownloader(
         try {
             downloadWithResume(item, effectiveUrl, partFile, onProgress)
 
-            coroutineContext.ensureActive()
+            currentCoroutineContext().ensureActive()
             onProgress(DownloadProgress(item.id, "importing", -1f, "正在校验并原子写入离线库与 FTS 索引..."))
             val importedCount = importLocalFileAtomic(partFile, item.format, item.id, item.name, item.categoryLabel)
             if (importedCount <= 0) {
@@ -173,9 +173,6 @@ class DictionaryDownloader(
         onProgress: (DownloadProgress) -> Unit,
         allowRetryOn416: Boolean = true
     ) {
-        // Capture here: inside the nested use{} blocks below the CoroutineScope
-        // receiver is lost, so bare `coroutineContext` is unresolved (compile error).
-        val coroutineContext = currentCoroutineContext()
         val existingBytes = if (partFile.exists()) partFile.length() else 0L
         val resumeLabel = if (existingBytes > 0L) {
             String.format("正在断点续传（已下 %.1f MB）...", existingBytes / (1024.0 * 1024.0))
@@ -221,7 +218,7 @@ class DictionaryDownloader(
                 FileOutputStream(partFile, isPartial).use { output ->
                     val buffer = ByteArray(16 * 1024)
                     while (true) {
-                        coroutineContext.ensureActive()
+                        currentCoroutineContext().ensureActive()
                         val read = input.read(buffer)
                         if (read == -1) break
                         output.write(buffer, 0, read)

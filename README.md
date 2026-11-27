@@ -16,7 +16,7 @@
    - Room v3 接入 `@Fts4` 全文倒排索引（附显式 `MIGRATION_1_2` 与 `MIGRATION_2_3`），彻底消除 77 万/340 万词库的全表扫描。
    - 查词采用 4 阶段加速：B-Tree 精确/前缀索引 → 英语词形还原（如 `studies → study`）→ FTS4 倒排全文匹配 → 索引化 **Damerau-Levenshtein 拼写纠错**（自动纠正漏字、多字、换位如 `recieve → receive`、`accomodate → accommodate`）。
 3. **纯离线真人感神经语音朗读（Sherpa-ONNX + Piper VITS）**
-   - 集成 [Sherpa-ONNX v1.12.31](https://github.com/k2-fsa/sherpa-onnx/releases)（保留内置 `espeak-ng`），支持断点下载 3 款 [Piper 英文离线神经语音模型](https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models)（美音 Amy 20 MB、美音 Lessac 63 MB、英音 Alan 63 MB），并自动回退系统离线 TTS。
+   - 集成 [Sherpa-ONNX v1.12.31](https://github.com/k2-fsa/sherpa-onnx/releases)（保留内置 `espeak-ng`），支持断点下载 5 款 [Piper 英文离线神经语音模型](https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models)（英音 Cori/Alba/Alan、美音 Lessac 各约 63 MB，美音 Amy 约 67 MB），并自动回退系统离线 TTS。
 4. **Gemini API 深度翻译（可选）+ 有道单词本导入导出 + SM-2 遗忘曲线复习**
    - 不填 Gemini Key 也可完整离线使用；支持无 Root ADB 导入有道单词本（`tools/adb_import_youdao.py`）与防丢卡的本轮重学队列。
 

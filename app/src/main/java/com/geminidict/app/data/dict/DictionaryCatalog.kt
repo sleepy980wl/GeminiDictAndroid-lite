@@ -23,15 +23,11 @@ data class DictionaryCatalogItem(
     val license: String,
     val downloadUrl: String,
     val isGithubRaw: Boolean,
-    val format: DictFormat
+    val format: DictFormat,
+    /** Non-null for vocabulary books that can be studied directly as wordbooks (e.g. 专八/TOEFL/四级). */
+    val wordbookLabel: String? = null
 )
 
-/**
- * Verified publicly downloadable open-source & public-domain offline dictionaries across
- * English-English, English-Chinese (including bilingual example books), Chinese-English, and Chinese.
- * Commercial copyrighted dictionaries (e.g. modern Oxford/Collins/Merriam-Webster) are not bundled;
- * users can import their own legally obtained local CSV/JSON/TSV dictionaries via the local import button.
- */
 object DictionaryCatalog {
     val items: List<DictionaryCatalogItem> = listOf(
         // --- 1. 英英权威公版词典 ---
@@ -77,123 +73,132 @@ object DictionaryCatalog {
             format = DictFormat.ECDICT_CSV_ZIP
         ),
 
-        // --- 3. 含真实双语例句的开源英汉词库 (kajweb/dict) ---
+        // --- 3. 含真实双语例句的开源英汉词库（下载后自动出现在「单词本」分组供全词库学习） ---
         DictionaryCatalogItem(
             id = "kajweb_level8",
             name = "专八核心词汇（含双语例句）",
             categoryLabel = "英汉·例句",
-            description = "含美/英音标、中英释义与真实中英双语例句，安装后自动与 ECDICT 合并补全例句。",
+            description = "含美/英音标、中英释义与真实中英双语例句，下载后可直接在「单词本」按遗忘曲线学习全部词汇。",
             approxSize = "~5.1 MB",
             approxSizeMb = 5,
             approxEntries = "12,197 词条",
             license = "Open Source (kajweb/dict)",
             downloadUrl = "https://raw.githubusercontent.com/kajweb/dict/master/book/1521164650006_Level8luan_2.zip",
             isGithubRaw = true,
-            format = DictFormat.KAJWEB_JSONL_ZIP
+            format = DictFormat.KAJWEB_JSONL_ZIP,
+            wordbookLabel = "专八"
         ),
         DictionaryCatalogItem(
             id = "kajweb_toefl",
             name = "TOEFL 核心词汇（含双语例句）",
             categoryLabel = "英汉·例句",
-            description = "托福高频词库，每词附带美/英音标、中文释义及中英双语例句。",
+            description = "托福高频词库，每词附带音标、中文释义及双语例句，下载后可作为单词本学习。",
             approxSize = "~4.1 MB",
             approxSizeMb = 4,
             approxEntries = "9,213 词条",
             license = "Open Source (kajweb/dict)",
             downloadUrl = "https://raw.githubusercontent.com/kajweb/dict/master/book/1521164640451_TOEFL_2.zip",
             isGithubRaw = true,
-            format = DictFormat.KAJWEB_JSONL_ZIP
+            format = DictFormat.KAJWEB_JSONL_ZIP,
+            wordbookLabel = "TOEFL"
         ),
         DictionaryCatalogItem(
             id = "kajweb_gre",
             name = "GRE 核心词汇（含双语例句）",
             categoryLabel = "英汉·例句",
-            description = "GRE 高阶学术词汇库，附带音标、精准中文释义及中英双语例句。",
+            description = "GRE 高阶学术词汇库，附带音标、精准中文释义及双语例句，下载后可作为单词本学习。",
             approxSize = "~2.4 MB",
             approxSizeMb = 3,
             approxEntries = "7,199 词条",
             license = "Open Source (kajweb/dict)",
             downloadUrl = "https://raw.githubusercontent.com/kajweb/dict/master/book/1521164637271_GRE_2.zip",
             isGithubRaw = true,
-            format = DictFormat.KAJWEB_JSONL_ZIP
+            format = DictFormat.KAJWEB_JSONL_ZIP,
+            wordbookLabel = "GRE"
         ),
         DictionaryCatalogItem(
             id = "kajweb_kaoyan",
             name = "考研英语词汇（含双语例句）",
             categoryLabel = "英汉·例句",
-            description = "考研核心词库，含音标、多词性释义及中英双语例句。",
+            description = "考研核心词库，含音标、多词性释义及双语例句，下载后可作为单词本学习。",
             approxSize = "~2.3 MB",
             approxSizeMb = 2,
             approxEntries = "4,533 词条",
             license = "Open Source (kajweb/dict)",
             downloadUrl = "https://raw.githubusercontent.com/kajweb/dict/master/book/1521164654696_KaoYan_2.zip",
             isGithubRaw = true,
-            format = DictFormat.KAJWEB_JSONL_ZIP
+            format = DictFormat.KAJWEB_JSONL_ZIP,
+            wordbookLabel = "考研"
         ),
         DictionaryCatalogItem(
             id = "kajweb_sat",
             name = "SAT 核心词汇（含双语例句）",
             categoryLabel = "英汉·例句",
-            description = "SAT 考试核心词库，含音标与双语例句。",
+            description = "SAT 考试核心词库，含音标与双语例句，下载后可作为单词本学习。",
             approxSize = "~1.7 MB",
             approxSizeMb = 2,
             approxEntries = "4,423 词条",
             license = "Open Source (kajweb/dict)",
             downloadUrl = "https://raw.githubusercontent.com/kajweb/dict/master/book/1521164670910_SAT_2.zip",
             isGithubRaw = true,
-            format = DictFormat.KAJWEB_JSONL_ZIP
+            format = DictFormat.KAJWEB_JSONL_ZIP,
+            wordbookLabel = "SAT"
         ),
         DictionaryCatalogItem(
             id = "kajweb_cet4",
             name = "四级英语词汇（含双语例句）",
             categoryLabel = "英汉·例句",
-            description = "大学英语四级核心词库，含音标、释义与中英双语例句。",
+            description = "大学英语四级核心词库，含音标、释义与双语例句，下载后可作为单词本学习。",
             approxSize = "~2.6 MB",
             approxSizeMb = 3,
             approxEntries = "3,739 词条",
             license = "Open Source (kajweb/dict)",
             downloadUrl = "https://raw.githubusercontent.com/kajweb/dict/master/book/1524052539052_CET4luan_2.zip",
             isGithubRaw = true,
-            format = DictFormat.KAJWEB_JSONL_ZIP
+            format = DictFormat.KAJWEB_JSONL_ZIP,
+            wordbookLabel = "四级"
         ),
         DictionaryCatalogItem(
             id = "kajweb_cet6",
             name = "六级英语词汇（含双语例句）",
             categoryLabel = "英汉·例句",
-            description = "大学英语六级核心词库，含音标、释义与中英双语例句。",
+            description = "大学英语六级核心词库，含音标、释义与双语例句，下载后可作为单词本学习。",
             approxSize = "~1.1 MB",
             approxSizeMb = 2,
             approxEntries = "2,078 词条",
             license = "Open Source (kajweb/dict)",
             downloadUrl = "https://raw.githubusercontent.com/kajweb/dict/master/book/1524052554766_CET6_2.zip",
             isGithubRaw = true,
-            format = DictFormat.KAJWEB_JSONL_ZIP
+            format = DictFormat.KAJWEB_JSONL_ZIP,
+            wordbookLabel = "六级"
         ),
         DictionaryCatalogItem(
             id = "kajweb_ielts",
             name = "雅思核心词汇（含双语例句）",
             categoryLabel = "英汉·例句",
-            description = "IELTS 高频词库，含音标、释义与中英双语例句。",
+            description = "IELTS 高频词库，含音标、释义与双语例句，下载后可作为单词本学习。",
             approxSize = "~1.5 MB",
             approxSizeMb = 2,
             approxEntries = "3,427 词条",
             license = "Open Source (kajweb/dict)",
             downloadUrl = "https://raw.githubusercontent.com/kajweb/dict/master/book/1521164624473_IELTSluan_2.zip",
             isGithubRaw = true,
-            format = DictFormat.KAJWEB_JSONL_ZIP
+            format = DictFormat.KAJWEB_JSONL_ZIP,
+            wordbookLabel = "雅思"
         ),
         DictionaryCatalogItem(
             id = "kajweb_bec",
             name = "商务英语 BEC 词汇（含双语例句）",
             categoryLabel = "英汉·例句",
-            description = "职场与商务英语核心词汇，含商务场景双语例句。",
+            description = "职场与商务英语核心词汇，含商务场景双语例句，下载后可作为单词本学习。",
             approxSize = "~1.4 MB",
             approxSizeMb = 2,
             approxEntries = "2,753 词条",
             license = "Open Source (kajweb/dict)",
             downloadUrl = "https://raw.githubusercontent.com/kajweb/dict/master/book/1521164626760_BEC_2.zip",
             isGithubRaw = true,
-            format = DictFormat.KAJWEB_JSONL_ZIP
+            format = DictFormat.KAJWEB_JSONL_ZIP,
+            wordbookLabel = "商务英语"
         ),
 
         // --- 4. 汉英开源词典 ---
@@ -265,4 +270,8 @@ object DictionaryCatalog {
             format = DictFormat.XINHUA_XIEHOUYU_JSON
         )
     )
+
+    val wordbookBooksByLabel: Map<String, DictionaryCatalogItem> = items
+        .filter { it.wordbookLabel != null }
+        .associateBy { it.wordbookLabel!! }
 }

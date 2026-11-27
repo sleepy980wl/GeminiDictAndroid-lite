@@ -1,6 +1,7 @@
 package com.geminidict.app.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.PlayArrow
@@ -46,12 +48,25 @@ import com.geminidict.app.ui.viewmodel.MainViewModel
 fun ReviewScreen(viewModel: MainViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val allEntries by viewModel.wordbookEntries.collectAsStateWithLifecycle()
+    val groups by viewModel.wordbookGroups.collectAsStateWithLifecycle()
     val todayLearned by viewModel.todayLearnedCount.collectAsStateWithLifecycle()
 
     var spellingMode by remember { mutableStateOf(false) }
     var spellingInput by remember { mutableStateOf("") }
 
-    val masteredCount = remember(allEntries) { allEntries.count { it.masteryLevel >= 4 } }
+    val reviewGroupChips = remember(groups) {
+        val list = LinkedHashSet<String>()
+        list.add("全部")
+        list.add("我的单词本")
+        groups.forEach { if (it.isNotBlank()) list.add(it) }
+        list.toList()
+    }
+
+    val scopedEntries = remember(allEntries, uiState.reviewGroupFilter) {
+        if (uiState.reviewGroupFilter == "全部") allEntries
+        else allEntries.filter { it.groupName == uiState.reviewGroupFilter }
+    }
+    val masteredCount = remember(scopedEntries) { scopedEntries.count { it.masteryLevel >= 4 } }
     val remainingCount = (uiState.reviewQueue.size - uiState.currentReviewIndex).coerceAtLeast(0)
     val currentCard = uiState.reviewQueue.getOrNull(uiState.currentReviewIndex)
     val isRelearning = currentCard != null && currentCard.id in uiState.sessionRelearnIds
@@ -66,6 +81,24 @@ fun ReviewScreen(viewModel: MainViewModel) {
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
+        Spacer(Modifier.height(6.dp))
+
+        // Select which wordbook/exam book to review
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            reviewGroupChips.forEach { group ->
+                FilterChip(
+                    selected = uiState.reviewGroupFilter == group,
+                    onClick = { viewModel.setReviewGroupFilter(group) },
+                    label = { Text(group) }
+                )
+            }
+        }
+
         Spacer(Modifier.height(8.dp))
 
         Row(
@@ -74,7 +107,7 @@ fun ReviewScreen(viewModel: MainViewModel) {
         ) {
             StatMiniCard("剩余待复习", "$remainingCount", Modifier.weight(1f))
             StatMiniCard("今日已记牢", "$todayLearned", Modifier.weight(1f))
-            StatMiniCard("已掌握", "$masteredCount/${allEntries.size}", Modifier.weight(1f))
+            StatMiniCard("已掌握", "$masteredCount/${scopedEntries.size}", Modifier.weight(1f))
         }
 
         Spacer(Modifier.height(10.dp))
@@ -119,14 +152,14 @@ fun ReviewScreen(viewModel: MainViewModel) {
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = if (allEntries.isEmpty()) "单词本还是空的" else "当前到期词汇已全部复习完成！",
+                        text = if (scopedEntries.isEmpty()) "该单词本暂无词汇" else "当前到期词汇已全部复习完成！",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = if (allEntries.isEmpty()) {
-                            "请先收藏或导入有道单词本，系统将自动按艾宾浩斯遗忘曲线安排每日复习。"
+                        text = if (scopedEntries.isEmpty()) {
+                            "请先收藏、导入有道 XML，或在「单词本」页选择已下载词库并点击加入遗忘曲线学习。"
                         } else {
                             "系统已根据记忆衰减模型安排下次复习时间，保持每日打卡记忆更牢固。"
                         },
@@ -240,12 +273,20 @@ fun ReviewScreen(viewModel: MainViewModel) {
                     if (currentCard.exampleSentence.isNotBlank()) {
                         Spacer(Modifier.height(10.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = currentCard.exampleSentence,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = currentCard.exampleSentence,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (currentCard.exampleTranslation.isNotBlank()) {
+                                    Text(
+                                        text = currentCard.exampleTranslation,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                             IconButton(onClick = { viewModel.speakEnglish(currentCard.exampleSentence) }) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = "朗读例句")
                             }

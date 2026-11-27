@@ -10,6 +10,7 @@ import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
@@ -60,7 +61,7 @@ class NeuralTtsEngine {
         speed: Float
     ) = withContext(Dispatchers.IO) {
         stopPlayback()
-        coroutineContext.ensureActive()
+        currentCoroutineContext().ensureActive()
 
         val audio = synchronized(engineLock) {
             val tts = ensureModelLoadedLocked(voice)
@@ -71,7 +72,7 @@ class NeuralTtsEngine {
             )
         }
 
-        coroutineContext.ensureActive()
+        currentCoroutineContext().ensureActive()
         if (audio.samples.isEmpty() || audio.sampleRate <= 0) {
             throw IllegalStateException("神经语音合成结果为空")
         }
@@ -139,7 +140,7 @@ class NeuralTtsEngine {
             var offset = 0
             val chunkSize = 2048
             while (offset < samples.size) {
-                coroutineContext.ensureActive()
+                currentCoroutineContext().ensureActive()
                 val count = (samples.size - offset).coerceAtMost(chunkSize)
                 val written = track.write(samples, offset, count, AudioTrack.WRITE_BLOCKING)
                 if (written <= 0) break

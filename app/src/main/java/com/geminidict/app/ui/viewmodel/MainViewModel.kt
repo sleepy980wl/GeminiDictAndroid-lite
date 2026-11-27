@@ -49,7 +49,7 @@ enum class WordbookSort {
 
 data class DictSearchHit(
     val entry: DictionaryEntryEntity,
-    val matchHint: String? = null // null=精确/前缀, "全文匹配", "词形还原", "拼写纠错"
+    val matchHint: String? = null
 )
 
 data class MainUiState(
@@ -63,12 +63,15 @@ data class MainUiState(
     val statusBanner: String? = null,
     val securityWarning: String? = null,
 
-    // Wordbook filter & sort
+    // Wordbook filter, sort & downloaded-book study preview
     val wordbookQuery: String = "",
     val selectedGroup: String = "全部",
     val wordbookSort: WordbookSort = WordbookSort.NEWEST,
+    val previewBookEntries: List<DictionaryEntryEntity> = emptyList(),
+    val isImportingBookToWordbook: Boolean = false,
 
-    // Review session
+    // Review session (supports reviewing all or a specific group/book)
+    val reviewGroupFilter: String = "全部",
     val reviewQueue: List<WordbookEntryEntity> = emptyList(),
     val currentReviewIndex: Int = 0,
     val sessionRelearnPool: Map<Long, WordbookEntryEntity> = emptyMap(),
@@ -202,13 +205,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Multi-stage millisecond search:
-     * 1. Indexed B-Tree exact/prefix lookup (< 2ms)
-     * 2. FTS4 inverted-index full-text lookup for Chinese/definition queries (< 10ms)
-     * 3. English stemmer lookup (e.g. "studies" -> "study")
-     * 4. Indexed Damerau-Levenshtein typo tolerance (e.g. "accomodate" -> "accommodate")
-     */
     private suspend fun searchEnglishChineseFast(
         trimmed: String,
         lower: String,
@@ -224,7 +220,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         mergedMap[item.wordLower] = DictSearchHit(item, hint)
                     }
                 } else {
-                    // Merge bilingual example pair or missing Chinese/English definition across installed dictionaries
                     val cur = existing.entry
                     val fillEx = cur.example.isBlank() && item.example.isNotBlank()
                     val fillTrans = cur.translation.isBlank() && item.translation.isNotBlank()
@@ -243,7 +238,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Stage 1: Fast B-Tree exact + prefix search
         val prefixHits = db.dictionaryDao().searchPrefixIndexed(
             queryLower = lower,
             prefixPattern = "$escapedLower%",
@@ -251,7 +245,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         absorb(prefixHits, hint = null, maxTotal = 30)
 
-        // Stage 2: English inflection/stemming fallback if exact word not matched
         val isEnglish = FuzzyWordMatcher.isAsciiEnglish(lower)
         if (isEnglish && !mergedMap.containsKey(lower)) {
             val stems = FuzzyWordMatcher.generateStemCandidates(lower)
@@ -261,7 +254,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Stage 3: FTS4 inverted-index search (especially for Chinese -> English or multi-word definitions)
         if (mergedMap.size < 15) {
             val ftsQuery = FuzzyWordMatcher.toSafeFtsQuery(trimmed)
             if (ftsQuery.isNotEmpty()) {
@@ -269,12 +261,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val ftsHits = db.dictionaryDao().searchFts(ftsQuery, rawLimit = 60)
                     absorb(ftsHits, hint = if (isEnglish) "全文匹配" else null, maxTotal = 30)
                 } catch (_: Exception) {
-                    // Ignore malformed FTS syntax gracefully
                 }
             }
         }
 
-        // Stage 4: Smart English typo/spelling correction when exact/prefix matches are scarce
         if (isEnglish && lower.length >= 3 && mergedMap.size < 8) {
             val maxDist = FuzzyWordMatcher.maxAllowedDistance(lower.length)
             val p2 = SqlLikeEscaper.escape(lower.take(2)) + "%"
@@ -389,7 +379,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- Wordbook Operations ---
+    // --- Wordbook Operations & Study Downloaded Vocabulary Books ---
 
     fun toggleBookmarkFromDict(entry: DictionaryEntryEntity) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -501,11 +491,92 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateWordbookFilter(query: String? = null, group: String? = null, sort: WordbookSort? = null) {
+        val nextGroup = group ?: _uiState.value.selectedGroup
         _uiState.value = _uiState.value.copy(
             wordbookQuery = query ?: _uiState.value.wordbookQuery,
-            selectedGroup = group ?: _uiState.value.selectedGroup,
+            selectedGroup = nextGroup,
             wordbookSort = sort ?: _uiState.value.wordbookSort
         )
+        if (group != null) {
+            loadBookPreviewIfApplicable(nextGroup)
+        }
+    }
+
+    private fun loadBookPreviewIfApplicable(groupLabel: String) {
+        val book = DictionaryCatalog.wordbookBooksByLabel[groupLabel]
+        if (book == null) {
+            _uiState.value = _uiState.value.copy(previewBookEntries = emptyList())
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val preview = db.dictionaryDao().getPreviewBySource(book.id, limit = 300)
+            _uiState.value = _uiState.value.copy(previewBookEntries = preview)
+        }
+    }
+
+    /**
+     * Imports ALL words of a downloaded exam/business vocabulary book (e.g. 专八/TOEFL/GRE/四级)
+     * into `wordbook_entries` under `groupName = book.wordbookLabel`, staggering daily batches
+     * (30 new words per day) so the user can study the entire book via SM-2 forgetting curve.
+     */
+    fun importDownloadedBookAsWordbook(book: DictionaryCatalogItem, dailyNewWords: Int = 30) {
+        val label = book.wordbookLabel ?: return
+        if (_uiState.value.isImportingBookToWordbook) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.value = _uiState.value.copy(isImportingBookToWordbook = true)
+            try {
+                val allWords = db.dictionaryDao().getAllBySource(book.id)
+                if (allWords.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        isImportingBookToWordbook = false,
+                        statusBanner = "词库「$label」暂无词条，请确认已在「词库」页下载完成。"
+                    )
+                    return@launch
+                }
+                val now = System.currentTimeMillis()
+                val dayMs = 24L * 60L * 60L * 1000L
+                var added = 0
+                var skipped = 0
+
+                db.withTransaction {
+                    allWords.chunked(500).forEachIndexed { chunkIdx, chunk ->
+                        val baseIdx = chunkIdx * 500
+                        val entities = chunk.mapIndexed { offset, d ->
+                            val dayOffset = (baseIdx + offset) / dailyNewWords.coerceAtLeast(1)
+                            WordbookEntryEntity(
+                                word = d.word,
+                                wordLower = d.wordLower,
+                                phonetic = d.phonetic,
+                                translation = d.translation.ifBlank { d.definition },
+                                definition = d.definition,
+                                exampleSentence = d.example,
+                                exampleTranslation = d.exampleTranslation,
+                                groupName = label,
+                                tags = label,
+                                source = book.id,
+                                createdAt = now,
+                                updatedAt = now,
+                                nextReviewAt = now + dayOffset * dayMs
+                            )
+                        }
+                        val ids = db.wordbookDao().insertAllIgnore(entities)
+                        for (id in ids) {
+                            if (id != -1L) added++ else skipped++
+                        }
+                    }
+                }
+                _uiState.value = _uiState.value.copy(
+                    isImportingBookToWordbook = false,
+                    statusBanner = "已将「$label」全部词库加入学习计划：新增 $added 词，已存在 $skipped 词（每日自动排期 $dailyNewWords 新词，前往「复习」页即可开始）。"
+                )
+                refreshReviewQueue()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isImportingBookToWordbook = false,
+                    statusBanner = "加入学习计划失败：${e.message}"
+                )
+            }
+        }
     }
 
     // --- Youdao Import & Export ---
@@ -605,7 +676,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         _uiState.value = _uiState.value.copy(
-            statusBanner = "有道单词本导入完成：新增 $added 词，已存在跳过 $skipped 词（已按原有熟练度错峰安排复习）。"
+            statusBanner = "单词本导入完成：新增 $added 词，已存在跳过 $skipped 词（已按原有熟练度错峰安排复习）。"
         )
         refreshReviewQueue()
     }
@@ -625,12 +696,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- SM-2 Forgetting Curve Review ---
+    // --- SM-2 Forgetting Curve Review (Supports Reviewing Specific Book/Group) ---
+
+    fun setReviewGroupFilter(group: String) {
+        _uiState.value = _uiState.value.copy(reviewGroupFilter = group)
+        refreshReviewQueue()
+    }
 
     fun refreshReviewQueue() {
         viewModelScope.launch(Dispatchers.IO) {
-            val due = db.wordbookDao().getDueForReview(System.currentTimeMillis(), limit = 50)
-            val merged = ReviewSessionQueue.mergeWithDue(due, _uiState.value.sessionRelearnPool)
+            val group = _uiState.value.reviewGroupFilter
+            val now = System.currentTimeMillis()
+            val due = if (group == "全部") {
+                db.wordbookDao().getDueForReview(now, limit = 50)
+            } else {
+                db.wordbookDao().getDueForReviewByGroup(group, now, limit = 50)
+            }
+            val scopedPool = if (group == "全部") {
+                _uiState.value.sessionRelearnPool
+            } else {
+                _uiState.value.sessionRelearnPool.filterValues { it.groupName == group }
+            }
+            val merged = ReviewSessionQueue.mergeWithDue(due, scopedPool)
             _uiState.value = _uiState.value.copy(
                 reviewQueue = merged,
                 currentReviewIndex = 0,
@@ -681,8 +768,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
 
             if (snapshot.currentIndex >= snapshot.queue.size) {
-                val due = db.wordbookDao().getDueForReview(System.currentTimeMillis(), limit = 50)
-                val merged = ReviewSessionQueue.mergeWithDue(due, snapshot.relearnPool)
+                val group = state.reviewGroupFilter
+                val due = if (group == "全部") {
+                    db.wordbookDao().getDueForReview(System.currentTimeMillis(), limit = 50)
+                } else {
+                    db.wordbookDao().getDueForReviewByGroup(group, System.currentTimeMillis(), limit = 50)
+                }
+                val scopedPool = if (group == "全部") {
+                    snapshot.relearnPool
+                } else {
+                    snapshot.relearnPool.filterValues { it.groupName == group }
+                }
+                val merged = ReviewSessionQueue.mergeWithDue(due, scopedPool)
                 _uiState.value = _uiState.value.copy(
                     reviewQueue = merged,
                     currentReviewIndex = 0,

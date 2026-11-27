@@ -26,7 +26,10 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -49,6 +52,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.geminidict.app.data.dict.DictionaryCatalog
+import com.geminidict.app.data.local.entity.DictionaryEntryEntity
 import com.geminidict.app.data.local.entity.WordbookEntryEntity
 import com.geminidict.app.ui.viewmodel.MainViewModel
 import com.geminidict.app.ui.viewmodel.WordbookSort
@@ -60,6 +65,7 @@ fun WordbookScreen(viewModel: MainViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val allEntries by viewModel.wordbookEntries.collectAsStateWithLifecycle()
     val groups by viewModel.wordbookGroups.collectAsStateWithLifecycle()
+    val downloadedDicts by viewModel.downloadedDicts.collectAsStateWithLifecycle()
 
     var editingEntry by remember { mutableStateOf<WordbookEntryEntity?>(null) }
     var deletingEntry by remember { mutableStateOf<WordbookEntryEntity?>(null) }
@@ -89,6 +95,31 @@ fun WordbookScreen(viewModel: MainViewModel) {
         }
     }
 
+    // Build ordered chip list: 全部 -> 我的单词本 -> 已下载词库(专八/TOEFL/GRE/考研/SAT/四级/六级/雅思/商务英语) -> 其他自定义分组
+    val downloadedIds = remember(downloadedDicts) { downloadedDicts.map { it.id }.toSet() }
+    val downloadedBookLabels = remember(downloadedIds) {
+        DictionaryCatalog.items
+            .filter { it.wordbookLabel != null && it.id in downloadedIds }
+            .map { it.wordbookLabel!! }
+    }
+    val orderedGroupChips = remember(groups, downloadedBookLabels) {
+        val list = LinkedHashSet<String>()
+        list.add("全部")
+        list.add("我的单词本")
+        downloadedBookLabels.forEach { list.add(it) }
+        groups.forEach { if (it.isNotBlank()) list.add(it) }
+        list.toList()
+    }
+
+    val selectedDownloadedBook = remember(uiState.selectedGroup, downloadedIds) {
+        val book = DictionaryCatalog.wordbookBooksByLabel[uiState.selectedGroup]
+        if (book != null && book.id in downloadedIds) book else null
+    }
+    val selectedBookTotalCount = remember(selectedDownloadedBook, downloadedDicts) {
+        if (selectedDownloadedBook == null) 0
+        else downloadedDicts.firstOrNull { it.id == selectedDownloadedBook.id }?.entryCount ?: 0
+    }
+
     val filteredEntries = remember(allEntries, uiState.wordbookQuery, uiState.selectedGroup, uiState.wordbookSort) {
         allEntries
             .filter { entry ->
@@ -106,6 +137,14 @@ fun WordbookScreen(viewModel: MainViewModel) {
                     WordbookSort.DUE_FIRST -> list.sortedBy { it.nextReviewAt }
                 }
             }
+    }
+
+    val filteredPreviewEntries = remember(uiState.previewBookEntries, uiState.wordbookQuery) {
+        uiState.previewBookEntries.filter { entry ->
+            uiState.wordbookQuery.isBlank() ||
+                entry.word.contains(uiState.wordbookQuery, ignoreCase = true) ||
+                entry.translation.contains(uiState.wordbookQuery, ignoreCase = true)
+        }
     }
 
     Scaffold(
@@ -127,7 +166,7 @@ fun WordbookScreen(viewModel: MainViewModel) {
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "兼容有道单词本分组、熟练度与 XML 双向导入导出",
+                text = "支持有道 XML/TXT/CSV/DB 导入导出，及已下载词库直接学习",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -144,7 +183,7 @@ fun WordbookScreen(viewModel: MainViewModel) {
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("导入有道")
+                    Text("导入")
                 }
                 OutlinedButton(
                     onClick = { showAdbGuide = true },
@@ -152,7 +191,7 @@ fun WordbookScreen(viewModel: MainViewModel) {
                 ) {
                     Icon(Icons.Default.Build, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("ADB导入")
+                    Text("ADB")
                 }
                 OutlinedButton(
                     onClick = { exportLauncher.launch("my_wordbook_youdao.xml") },
@@ -160,7 +199,7 @@ fun WordbookScreen(viewModel: MainViewModel) {
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("导出XML")
+                    Text("导出")
                 }
             }
 
@@ -177,14 +216,14 @@ fun WordbookScreen(viewModel: MainViewModel) {
 
             Spacer(Modifier.height(8.dp))
 
+            // Ordered group chips: 全部 -> 我的单词本 -> Downloaded vocab books -> Custom groups
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                val allGroupNames = listOf("全部") + groups
-                allGroupNames.forEach { group ->
+                orderedGroupChips.forEach { group ->
                     FilterChip(
                         selected = uiState.selectedGroup == group,
                         onClick = { viewModel.updateWordbookFilter(group = group) },
@@ -216,14 +255,41 @@ fun WordbookScreen(viewModel: MainViewModel) {
 
             Spacer(Modifier.height(8.dp))
 
-            if (filteredEntries.isEmpty()) {
-                Text(
-                    text = "单词本暂无匹配词汇。可在「查词」页点击收藏，或点击上方「导入有道」/「ADB导入」导入你的有道单词本。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 16.dp)
-                )
-            } else {
+            // Action banner when viewing a downloaded vocabulary book that hasn't been fully imported to wordbook yet
+            if (selectedDownloadedBook != null && filteredEntries.size < selectedBookTotalCount) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "已下载离线词库「${selectedDownloadedBook.wordbookLabel}」（共 $selectedBookTotalCount 词，已加入学习计划 ${filteredEntries.size} 词）",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Button(
+                            enabled = !uiState.isImportingBookToWordbook,
+                            onClick = { viewModel.importDownloadedBookAsWordbook(selectedDownloadedBook) }
+                        ) {
+                            if (uiState.isImportingBookToWordbook) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("正在加入学习计划...")
+                            } else {
+                                Text("将全部 $selectedBookTotalCount 词加入遗忘曲线学习")
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+
+            if (filteredEntries.isNotEmpty()) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -237,6 +303,26 @@ fun WordbookScreen(viewModel: MainViewModel) {
                         )
                     }
                 }
+            } else if (selectedDownloadedBook != null && filteredPreviewEntries.isNotEmpty()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(filteredPreviewEntries, key = { "preview_${it.id}" }) { dictEntry ->
+                        BookPreviewCard(
+                            entry = dictEntry,
+                            onSpeak = { viewModel.speakEnglish(it) },
+                            onAddSingle = { viewModel.toggleBookmarkFromDict(dictEntry) }
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = "当前分组暂无词汇。可在「查词」页收藏，点上方「导入」导入有道 XML，或在「词库」页下载专八/TOEFL/GRE/考研/四六级/雅思/商务英语后直接在此学习。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
             }
         }
     }
@@ -295,6 +381,65 @@ fun WordbookScreen(viewModel: MainViewModel) {
 }
 
 @Composable
+private fun BookPreviewCard(
+    entry: DictionaryEntryEntity,
+    onSpeak: (String) -> Unit,
+    onAddSingle: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = entry.word,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (entry.phonetic.isNotBlank()) {
+                        Text(
+                            text = "/${entry.phonetic}/",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                IconButton(onClick = { onSpeak(entry.word) }) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = "离线发音")
+                }
+                IconButton(onClick = onAddSingle) {
+                    Icon(Icons.Default.Add, contentDescription = "单独加入我的单词本")
+                }
+            }
+            if (entry.translation.isNotBlank()) {
+                Text(text = entry.translation, style = MaterialTheme.typography.bodyMedium)
+            }
+            if (entry.example.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "例：${entry.example}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (entry.exampleTranslation.isNotBlank()) {
+                            Text(
+                                text = entry.exampleTranslation,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    IconButton(onClick = { onSpeak(entry.example) }) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = "朗读例句", modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun WordbookItemCard(
     entry: WordbookEntryEntity,
     onSpeak: (String) -> Unit,
@@ -334,12 +479,20 @@ private fun WordbookItemCard(
             if (entry.exampleSentence.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "例：${entry.exampleSentence}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "例：${entry.exampleSentence}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (entry.exampleTranslation.isNotBlank()) {
+                            Text(
+                                text = entry.exampleTranslation,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     IconButton(onClick = { onSpeak(entry.exampleSentence) }) {
                         Icon(Icons.Default.PlayArrow, contentDescription = "朗读例句", modifier = Modifier.size(16.dp))
                     }

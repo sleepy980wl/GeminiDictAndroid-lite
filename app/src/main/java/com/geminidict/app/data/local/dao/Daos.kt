@@ -23,9 +23,6 @@ object SqlLikeEscaper {
 
 @Dao
 interface DictionaryDao {
-    /**
-     * Fast B-Tree index-only lookup (exact + prefix on `wordLower`). Sub-2ms even on 770k+ rows.
-     */
     @Query(
         """
         SELECT * FROM dictionary_entries
@@ -52,9 +49,6 @@ interface DictionaryDao {
         rawLimit: Int = 90
     ): List<DictionaryEntryEntity>
 
-    /**
-     * Fast FTS4 inverted-index lookup across word, Chinese translation, and English definition.
-     */
     @Query(
         """
         SELECT dictionary_entries.* FROM dictionary_entries
@@ -71,10 +65,6 @@ interface DictionaryDao {
         rawLimit: Int = 60
     ): List<DictionaryEntryEntity>
 
-    /**
-     * Narrow indexed candidate fetch for English typo/fuzzy spelling correction.
-     * Uses B-Tree index on `wordLower` via 3 targeted prefix slices + length window.
-     */
     @Query(
         """
         SELECT * FROM dictionary_entries
@@ -98,6 +88,12 @@ interface DictionaryDao {
         maxLen: Int,
         limit: Int = 400
     ): List<DictionaryEntryEntity>
+
+    @Query("SELECT * FROM dictionary_entries WHERE sourceId = :sourceId ORDER BY id ASC LIMIT :limit")
+    suspend fun getPreviewBySource(sourceId: String, limit: Int = 300): List<DictionaryEntryEntity>
+
+    @Query("SELECT * FROM dictionary_entries WHERE sourceId = :sourceId ORDER BY id ASC")
+    suspend fun getAllBySource(sourceId: String): List<DictionaryEntryEntity>
 
     @Query("SELECT * FROM dictionary_entries WHERE wordLower IN (:wordsLower)")
     suspend fun getExactBatch(wordsLower: List<String>): List<DictionaryEntryEntity>
@@ -165,6 +161,9 @@ interface WordbookDao {
 
     @Query("SELECT * FROM wordbook_entries WHERE nextReviewAt <= :nowMillis ORDER BY nextReviewAt ASC LIMIT :limit")
     suspend fun getDueForReview(nowMillis: Long, limit: Int = 50): List<WordbookEntryEntity>
+
+    @Query("SELECT * FROM wordbook_entries WHERE groupName = :groupName AND nextReviewAt <= :nowMillis ORDER BY nextReviewAt ASC LIMIT :limit")
+    suspend fun getDueForReviewByGroup(groupName: String, nowMillis: Long, limit: Int = 50): List<WordbookEntryEntity>
 
     @Query("SELECT * FROM wordbook_entries ORDER BY createdAt DESC")
     suspend fun getAllSnapshot(): List<WordbookEntryEntity>
