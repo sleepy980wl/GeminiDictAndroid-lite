@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,7 +44,6 @@ fun SettingsScreen(viewModel: MainViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val ttsState by viewModel.ttsManager.state.collectAsStateWithLifecycle()
 
-    // Ensure TTS status is probed when user opens Settings
     LaunchedEffect(Unit) {
         viewModel.ttsManager.ensureInitialized()
     }
@@ -54,6 +54,7 @@ fun SettingsScreen(viewModel: MainViewModel) {
     var githubMirror by remember(uiState.githubMirrorPrefix) { mutableStateOf(uiState.githubMirrorPrefix) }
     var accent by remember(uiState.ttsAccent) { mutableStateOf(uiState.ttsAccent) }
     var speechRate by remember(uiState.ttsSpeechRate) { mutableFloatStateOf(uiState.ttsSpeechRate) }
+    var preferNeural by remember(uiState.preferNeuralVoice) { mutableStateOf(uiState.preferNeuralVoice) }
 
     Column(
         modifier = Modifier
@@ -87,7 +88,7 @@ fun SettingsScreen(viewModel: MainViewModel) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Gemini API 配置（Keystore 加密存储）",
+                    text = "Gemini API 配置（Keystore 加密存储，选填）",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -148,14 +149,14 @@ fun SettingsScreen(viewModel: MainViewModel) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "离线词典下载网络设置",
+                    text = "离线词典与语音模型下载网络设置",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 OutlinedTextField(
                     value = githubMirror,
                     onValueChange = { githubMirror = it },
-                    label = { Text("可选：GitHub Raw 镜像加速前缀") },
+                    label = { Text("可选：GitHub 镜像加速前缀") },
                     placeholder = { Text("例如 https://ghfast.top/ （留空则直连 GitHub）") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -169,16 +170,35 @@ fun SettingsScreen(viewModel: MainViewModel) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "英文离线朗读 (TTS)",
+                    text = "英文离线朗读（Sherpa-ONNX 神经语音 + 系统 TTS 兜底）",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
+                    text = "当前引擎：${ttsState.activeVoiceName}（已装神经语音包：${uiState.installedNeuralVoiceIds.size} 个）",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "优先使用离线神经语音（真人感）",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Switch(
+                        checked = preferNeural,
+                        onCheckedChange = { preferNeural = it }
+                    )
+                }
+                Text(
                     text = when {
+                        uiState.installedNeuralVoiceIds.isEmpty() ->
+                            "尚未下载离线神经语音模型。可前往「词库 -> 真人感神经语音」下载美音（Amy/Lessac）或英音（Alan），当前将使用系统离线 TTS。"
                         ttsState.fallbackNotice != null -> ttsState.fallbackNotice!!
-                        ttsState.hasOfflineEnglishVoice -> "已检测到本地离线英文语音包（当前实际口音：${ttsState.activeAccent}），可完全离线朗读单词与例句。"
-                        !ttsState.isInitialized -> "正在检测系统离线语音包..."
-                        else -> ttsState.errorMessage ?: "当前未检测到本地离线英文语音包，建议在系统「设置 -> 文字转语音」下载英文离线语音。"
+                        else -> "已就绪：无需联网即可用神经语音朗读任意英文单词与长例句。"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -204,7 +224,6 @@ fun SettingsScreen(viewModel: MainViewModel) {
                     onValueChange = { speechRate = it },
                     valueRange = 0.5f..1.5f
                 )
-                // Preview uses temporary override parameters without mutating saved preferences
                 OutlinedButton(
                     onClick = {
                         viewModel.speakEnglish(
@@ -227,7 +246,8 @@ fun SettingsScreen(viewModel: MainViewModel) {
                     baseUrl = baseUrl,
                     githubMirror = githubMirror,
                     ttsAccent = accent,
-                    ttsRate = speechRate
+                    ttsRate = speechRate,
+                    preferNeuralVoice = preferNeural
                 )
             },
             modifier = Modifier.fillMaxWidth()

@@ -35,6 +35,13 @@ jobs:
           yes | "$SDKMANAGER" --licenses || true
           "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
 
+
+      - name: Download Sherpa-ONNX 1.12.31 Android AAR
+        run: |
+          mkdir -p app/libs
+          curl -fSL -o app/libs/sherpa-onnx-1.12.31.aar \
+            https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.31/sherpa-onnx-1.12.31.aar
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:

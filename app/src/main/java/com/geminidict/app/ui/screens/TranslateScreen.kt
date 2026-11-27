@@ -42,8 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geminidict.app.data.local.entity.ChineseDictEntryEntity
-import com.geminidict.app.data.local.entity.DictionaryEntryEntity
 import com.geminidict.app.data.remote.GeminiTranslationResult
+import com.geminidict.app.ui.viewmodel.DictSearchHit
 import com.geminidict.app.ui.viewmodel.MainViewModel
 import java.util.Locale
 
@@ -65,7 +65,7 @@ fun TranslateScreen(viewModel: MainViewModel) {
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "本地中英词条：$totalDictCount 条 · 默认离线优先，支持随时调用 Gemini 深度翻译",
+            text = "本地词条：$totalDictCount 条 · 支持 FTS4 毫秒检索与英文拼写纠错",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -76,7 +76,7 @@ fun TranslateScreen(viewModel: MainViewModel) {
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
             ) {
                 Text(
-                    text = "当前仅内置 $totalDictCount 个示例高频词，请前往底部「词库」页一键下载含双语例句的专八/托福/考研/四级/雅思词库、ECDICT（77万词）或中华新华字典。",
+                    text = "当前仅内置 $totalDictCount 个示例高频词，请前往底部「词库」页下载韦氏英英、ECDICT、双语例句词库、CC-CEDICT 或中华新华字典。",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(10.dp)
                 )
@@ -89,7 +89,7 @@ fun TranslateScreen(viewModel: MainViewModel) {
             value = uiState.query,
             onValueChange = { viewModel.onQueryChanged(it) },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("输入英文单词、中文词语、成语或整句...") },
+            placeholder = { Text("输入英文（支持拼写模糊纠错）、中文词语、成语或整句...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             trailingIcon = {
                 if (uiState.query.isNotEmpty()) {
@@ -142,7 +142,7 @@ fun TranslateScreen(viewModel: MainViewModel) {
             Tab(
                 selected = uiState.translateSubTab == 0,
                 onClick = { viewModel.onTranslateSubTabChanged(0) },
-                text = { Text("中英词典 (${uiState.offlineResults.size})") }
+                text = { Text("英汉/英英/汉英 (${uiState.offlineResults.size})") }
             )
             Tab(
                 selected = uiState.translateSubTab == 1,
@@ -188,19 +188,19 @@ fun TranslateScreen(viewModel: MainViewModel) {
                 if (uiState.query.isNotBlank() && uiState.offlineResults.isEmpty() && !uiState.isGeminiLoading) {
                     item {
                         Text(
-                            text = "本地中英词库未匹配到「${uiState.query}」。可点击上方「使用 Gemini 翻译」或在「词库」页下载更多离线词典。",
+                            text = "本地词库未匹配到「${uiState.query}」。可点击上方「使用 Gemini 翻译」或在「词库」页下载更多离线词典。",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(vertical = 12.dp)
                         )
                     }
                 }
-                items(uiState.offlineResults, key = { "en_${it.id}" }) { entry ->
+                items(uiState.offlineResults, key = { "en_${it.entry.id}_${it.entry.wordLower}" }) { hit ->
                     OfflineDictCard(
-                        entry = entry,
-                        isBookmarked = entry.wordLower in bookmarkedSet,
+                        hit = hit,
+                        isBookmarked = hit.entry.wordLower in bookmarkedSet,
                         onSpeak = { text, accent -> viewModel.speakEnglish(text, accent) },
-                        onToggleBookmark = { viewModel.toggleBookmarkFromDict(entry) }
+                        onToggleBookmark = { viewModel.toggleBookmarkFromDict(hit.entry) }
                     )
                 }
             } else {
@@ -224,11 +224,12 @@ fun TranslateScreen(viewModel: MainViewModel) {
 
 @Composable
 private fun OfflineDictCard(
-    entry: DictionaryEntryEntity,
+    hit: DictSearchHit,
     isBookmarked: Boolean,
     onSpeak: (String, String?) -> Unit,
     onToggleBookmark: () -> Unit
 ) {
+    val entry = hit.entry
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
@@ -239,11 +240,16 @@ private fun OfflineDictCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = entry.word,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = entry.word,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (!hit.matchHint.isNullOrBlank()) {
+                            AssistChip(onClick = {}, label = { Text(hit.matchHint) })
+                        }
+                    }
                     if (entry.phonetic.isNotBlank()) {
                         Text(
                             text = "/${entry.phonetic}/",
@@ -271,7 +277,7 @@ private fun OfflineDictCard(
             if (entry.definition.isNotBlank() && entry.definition != entry.translation) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = entry.definition,
+                    text = entry.definition.take(600),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -306,16 +312,19 @@ private fun OfflineDictCard(
             } else if (entry.sourceId != "cc_cedict") {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "注：该离线词条暂无例句，可在「词库」下载「英汉·例句」词库，或点击上方「使用 Gemini 翻译」生成双语例句。",
+                    text = "注：该词条暂无离线例句，可在「词库」下载「英汉·例句」词库，或点击上方「使用 Gemini 翻译」生成双语例句。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            if (entry.tag.isNotBlank() || entry.collins > 0) {
+            if (entry.tag.isNotBlank() || entry.collins > 0 || entry.oxford > 0) {
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (entry.collins > 0) {
                         AssistChip(onClick = {}, label = { Text("柯林斯 ${entry.collins}★") })
+                    }
+                    if (entry.oxford > 0) {
+                        AssistChip(onClick = {}, label = { Text("牛津3000") })
                     }
                     if (entry.tag.isNotBlank()) {
                         AssistChip(onClick = {}, label = { Text(entry.tag.uppercase(Locale.ROOT)) })

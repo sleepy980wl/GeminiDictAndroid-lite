@@ -16,10 +16,12 @@ import java.util.zip.ZipInputStream
 
 /**
  * Pure-Kotlin streaming parsers for:
- * - ECDICT CSV (RFC-4180 multi-line quoted fields)
+ * - ECDICT CSV / ECDICT Ultimate CSV ZIP
+ * - Webster's Unabridged JSON ({ "word": "definition" })
  * - CC-CEDICT (plain/gzip)
- * - kajweb/dict JSONL ZIP (with authentic bilingual example sentences: sContent + sCn)
+ * - kajweb/dict JSONL ZIP (bilingual example sentences)
  * - Chinese Xinhua JSON (word/idiom/ci/xiehouyu)
+ * - Generic local TSV / CSV user dictionaries
  */
 object DictionaryParsers {
 
@@ -150,9 +152,138 @@ object DictionaryParsers {
     }
 
     /**
-     * Parses a single JSONL line from kajweb/dict books (Youdao JSON format with bilingual examples).
-     * Extracts paired (sContent, sCn) together so English and Chinese examples never misalign.
+     * Streams ECDICT Ultimate ZIP archive containing a `.csv` file without unpacking to disk.
      */
+    suspend fun parseEcdictCsvZipStream(
+        inputStream: InputStream,
+        sourceId: String,
+        batchSize: Int = 1000,
+        onBatch: suspend (List<DictionaryEntryEntity>) -> Unit
+    ): Int {
+        var total = 0
+        ZipInputStream(inputStream).use { zis ->
+            while (true) {
+                val entry = zis.nextEntry ?: break
+                if (!entry.isDirectory && entry.name.endsWith(".csv", ignoreCase = true)) {
+                    total += parseEcdictCsvStream(
+                        inputStream = object : InputStream() {
+                            override fun read(): Int = zis.read()
+                            override fun read(b: ByteArray, off: Int, len: Int): Int = zis.read(b, off, len)
+                        },
+                        sourceId = sourceId,
+                        batchSize = batchSize,
+                        onBatch = onBatch
+                    )
+                }
+                zis.closeEntry()
+            }
+        }
+        return total
+    }
+
+    /**
+     * Streams Webster's Unabridged Dictionary JSON object ({ "word": "definition", ... })
+     * using Gson JsonReader in O(1) memory.
+     */
+    suspend fun parseWebstersJsonStream(
+        inputStream: InputStream,
+        sourceId: String,
+        batchSize: Int = 1000,
+        onBatch: suspend (List<DictionaryEntryEntity>) -> Unit
+    ): Int {
+        var total = 0
+        val batch = ArrayList<DictionaryEntryEntity>(batchSize)
+        JsonReader(InputStreamReader(inputStream, StandardCharsets.UTF_8)).use { reader ->
+            reader.beginObject()
+            while (reader.hasNext()) {
+                val word = reader.nextName().trim()
+                val def = when (reader.peek()) {
+                    com.google.gson.stream.JsonToken.STRING -> reader.nextString().trim()
+                    com.google.gson.stream.JsonToken.NULL -> {
+                        reader.nextNull()
+                        ""
+                    }
+                    else -> {
+                        reader.skipValue()
+                        ""
+                    }
+                }
+                if (word.isNotEmpty() && def.isNotEmpty()) {
+                    batch.add(
+                        DictionaryEntryEntity(
+                            word = word,
+                            wordLower = word.lowercase(Locale.ROOT),
+                            definition = def,
+                            translation = "",
+                            tag = "webster-en",
+                            sourceId = sourceId
+                        )
+                    )
+                    if (batch.size >= batchSize) {
+                        onBatch(batch.toList())
+                        total += batch.size
+                        batch.clear()
+                    }
+                }
+            }
+            reader.endObject()
+        }
+        if (batch.isNotEmpty()) {
+            onBatch(batch.toList())
+            total += batch.size
+            batch.clear()
+        }
+        return total
+    }
+
+    /**
+     * Streams simple tab-separated (TSV) local dictionaries: `word\tdefinition_or_translation[\tphonetic[\texample]]`
+     */
+    suspend fun parseSimpleTsvStream(
+        inputStream: InputStream,
+        sourceId: String,
+        batchSize: Int = 1000,
+        onBatch: suspend (List<DictionaryEntryEntity>) -> Unit
+    ): Int {
+        var total = 0
+        val batch = ArrayList<DictionaryEntryEntity>(batchSize)
+        BufferedReader(InputStreamReader(inputStream, StandardCharsets.UTF_8)).use { reader ->
+            while (true) {
+                val line = reader.readLine() ?: break
+                val cleaned = line.removePrefix("\uFEFF").trim()
+                if (cleaned.isEmpty() || cleaned.startsWith("#")) continue
+                val parts = cleaned.split("\t")
+                val word = parts.getOrNull(0)?.trim().orEmpty()
+                val trans = parts.getOrNull(1)?.replace("\\n", "\n")?.trim().orEmpty()
+                if (word.isEmpty() || trans.isEmpty()) continue
+                val phonetic = parts.getOrNull(2)?.trim().orEmpty()
+                val example = parts.getOrNull(3)?.trim().orEmpty()
+                batch.add(
+                    DictionaryEntryEntity(
+                        word = word,
+                        wordLower = word.lowercase(Locale.ROOT),
+                        phonetic = phonetic,
+                        translation = trans,
+                        example = example,
+                        tag = "local-import",
+                        sourceId = sourceId
+                    )
+                )
+                if (batch.size >= batchSize) {
+                    onBatch(batch.toList())
+                    total += batch.size
+                    batch.clear()
+                }
+            }
+        }
+        if (batch.isNotEmpty()) {
+            onBatch(batch.toList())
+            total += batch.size
+            batch.clear()
+        }
+        return total
+    }
+
     fun parseKajwebJsonLine(line: String, sourceId: String): DictionaryEntryEntity? {
         val trimmed = line.trim()
         if (trimmed.isEmpty() || !trimmed.startsWith("{")) return null
@@ -188,7 +319,6 @@ object DictionaryParsers {
                 }
             }
 
-            // Extract first valid bilingual example pair atomically
             var exampleEn = ""
             var exampleZh = ""
             val sentences = inner.get("sentence")
@@ -225,10 +355,6 @@ object DictionaryParsers {
         }
     }
 
-    /**
-     * Streams kajweb/dict `.zip` archives containing JSONL `.json` files.
-     * Tolerates individual bad lines without aborting the entire dictionary.
-     */
     suspend fun parseKajwebJsonlZipStream(
         inputStream: InputStream,
         sourceId: String,

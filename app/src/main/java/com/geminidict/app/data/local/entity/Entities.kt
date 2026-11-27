@@ -1,11 +1,12 @@
 package com.geminidict.app.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Fts4
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * Offline English <-> Chinese dictionary entry (ECDICT / CC-CEDICT / kajweb bilingual books / Starter).
+ * Offline English <-> Chinese & English-English dictionary entry.
  */
 @Entity(
     tableName = "dictionary_entries",
@@ -35,6 +36,18 @@ data class DictionaryEntryEntity(
 )
 
 /**
+ * Room FTS4 inverted index linked to `dictionary_entries` for millisecond full-text search
+ * across translations and English definitions without full-table scans.
+ */
+@Fts4(contentEntity = DictionaryEntryEntity::class)
+@Entity(tableName = "dictionary_fts")
+data class DictionaryFtsEntity(
+    val word: String,
+    val translation: String,
+    val definition: String
+)
+
+/**
  * Offline Chinese dictionary entry (Xinhua Word / Idiom / Ci / Xiehouyu).
  */
 @Entity(
@@ -57,6 +70,14 @@ data class ChineseDictEntryEntity(
     val example: String = "",
     val more: String = "",
     val sourceId: String
+)
+
+@Fts4(contentEntity = ChineseDictEntryEntity::class)
+@Entity(tableName = "chinese_dict_fts")
+data class ChineseDictFtsEntity(
+    val headword: String,
+    val pinyin: String,
+    val explanation: String
 )
 
 /**
@@ -91,7 +112,7 @@ data class WordbookEntryEntity(
     val intervalDays: Int = 0,
     val easeFactor: Double = 2.5,
     val lapses: Int = 0,
-    val masteryLevel: Int = 0, // 0..5 (compatible with Youdao <progress>)
+    val masteryLevel: Int = 0,
     val lastReviewedAt: Long? = null,
     val nextReviewAt: Long = System.currentTimeMillis()
 )

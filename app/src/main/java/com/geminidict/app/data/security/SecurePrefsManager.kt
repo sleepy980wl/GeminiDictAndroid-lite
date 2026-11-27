@@ -5,11 +5,6 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
-/**
- * Securely stores Gemini API key and user preferences using Android Keystore AES256-GCM.
- * Includes resilient recovery & fallback if Keystore keys are invalidated (e.g. lock-screen reset
- * or cross-device restore) so the app never crashes on startup.
- */
 class SecurePrefsManager(context: Context) {
 
     val isUsingFallbackPrefs: Boolean
@@ -29,7 +24,6 @@ class SecurePrefsManager(context: Context) {
         return try {
             Triple(buildEncryptedPrefs(context), false, null)
         } catch (_: Exception) {
-            // Attempt one clean reset of corrupted encrypted prefs (e.g. after Keystore invalidation)
             try {
                 context.deleteSharedPreferences(PREFS_NAME)
                 Triple(
@@ -100,6 +94,12 @@ class SecurePrefsManager(context: Context) {
         prefs.edit().putFloat(KEY_TTS_RATE, rate.coerceIn(0.5f, 1.5f)).apply()
     }
 
+    fun getPreferNeuralVoice(): Boolean = prefs.getBoolean(KEY_PREFER_NEURAL, true)
+
+    fun setPreferNeuralVoice(prefer: Boolean) {
+        prefs.edit().putBoolean(KEY_PREFER_NEURAL, prefer).apply()
+    }
+
     fun isStarterDictLoaded(): Boolean = prefs.getBoolean(KEY_STARTER_LOADED, false)
 
     fun setStarterDictLoaded(loaded: Boolean) {
@@ -115,6 +115,7 @@ class SecurePrefsManager(context: Context) {
         private const val KEY_GITHUB_MIRROR = "github_mirror_prefix"
         private const val KEY_TTS_ACCENT = "tts_accent"
         private const val KEY_TTS_RATE = "tts_rate"
+        private const val KEY_PREFER_NEURAL = "prefer_neural_voice"
         private const val KEY_STARTER_LOADED = "starter_dict_loaded"
 
         const val DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"

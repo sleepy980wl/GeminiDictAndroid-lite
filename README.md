@@ -1,51 +1,25 @@
-# Gemini词典 (Android 原生离线词典 + Gemini AI + 有道单词本 + 遗忘曲线)
+# Gemini词典 (Android 原生离线词典 + 离线神经语音 + FTS4 毫秒模糊检索 + Gemini AI + 有道单词本)
 
-基于 **Kotlin + Jetpack Compose (Material 3) + Room + OkHttp + Android Keystore** 构建的离线优先中英双语词典与背单词应用。
+基于 **Kotlin + Jetpack Compose (Material 3) + Room (FTS4) + Sherpa-ONNX (Piper VITS) + OkHttp + Android Keystore** 构建的离线优先双语词典与背单词应用。
 
 ## 核心功能
 
-1. **默认离线中英互译、双语例句词库 & 中华新华字典**
-   - 内置 59 个示例高频词供首次启动验证，可在「词库」页一键下载完整公开离线词典。
-   - **离线词典一键下载中心**（支持 HTTP `Range` 断点续传、完整性校验、Room 原子事务替换、大文件确认与取消下载）：
-     - **带真实双语例句的开源英汉词库**（来自 [kajweb/dict](https://github.com/kajweb/dict)，与 ECDICT 共存时自动合并补全双语例句）：
-       - 专八核心词汇（12,197 词，~5.1 MB）
-       - TOEFL 核心词汇（9,213 词，~4.1 MB）
-       - 考研英语词汇（4,533 词，~2.3 MB）
-       - 四级英语词汇（3,739 词，~2.6 MB）
-       - 雅思核心词汇（3,427 词，~1.5 MB）
-     - [ECDICT 完整英汉词典](https://github.com/skywind3000/ECDICT) (`ecdict.csv`, ~66 MB, 约 77 万词条)
-     - [CC-CEDICT 汉英词典](https://www.mdbg.net/chinese/dictionary?page=cedict) (`cedict_1_0_ts_utf-8_mdbg.txt.gz`, ~4 MB, 约 12.5 万词条)
-     - [中华新华字典](https://github.com/pwxcoo/chinese-xinhua)：汉字库（16,142 字）、成语词典（31,648 条）、汉语词语库（264,434 条）、歇后语库（14,032 条）
-   - 设置页支持填写可选的 GitHub Raw 镜像加速前缀，方便国内网络下载。
-2. **Gemini API 深度翻译（可选，不填 Key 也可完整离线使用）**
-   - 调用 [Gemini Developer API](https://aistudio.google.com/api-reference) (`generateContent`) 提供精准语境翻译、词性、音标、用法解析与双语例句，支持 HTTP 429/503 自动退避重试与设置页「测试连接」。
-   - API Key 通过 Android Keystore (`EncryptedSharedPreferences`) 加密存储，支持 Keystore 失效自动恢复/降级兜底，并已排除云备份与换机迁移。
-   - 收藏 Gemini 释义到单词本时自动与已有词条合并，完整保留原有 SM-2 复习进度。
-3. **英文离线发音与例句朗读**
-   - 基于 Android 原生 TextToSpeech (TTS) 懒加载初始化，优先匹配本机已安装的离线英文语音包，支持美音 (`en-US`) / 英音 (`en-GB`) 切换、语速调节与单词/例句完全离线朗读。
-4. **有道「我的单词本」导入与完整单词本功能**
-   - 支持收藏、分组筛选、关键词搜索、4 种排序、编辑释义/例句/笔记、删除二次确认、熟练度进度条以及双向导出为有道标准 XML 格式。
-   - 支持批量事务导入有道 `.xml` / `.txt` / `.csv` / `.db` 文件，导入时自动去重、按原有 `progress` 错峰安排复习日期，并利用本地离线词典批量补全音标、释义与双语例句。
-   - **无 Root 手机 ADB 一键导入工具**（`tools/adb_import_youdao.py`）：
-     ```bash
-     python3 tools/adb_import_youdao.py --file /path/to/youdao_wordbook.xml
-     python3 tools/adb_import_youdao.py --scan-phone
-     ```
-5. **遗忘曲线智能学习与复习 (SM-2)**
-   - 基于 SM-2 / 艾宾浩斯遗忘曲线调度每日待复习队列；点选「忘记」的词（含最后一张卡）会进入本轮重学池，即使点击刷新也不会丢失，直到回忆通过。
-   - 支持**词卡翻转模式**与**拼写听写模式**，实时显示剩余待复习数与「今日已记牢」计数（不含「忘记」）。
+1. **17 套公开离线词典一键下载 + 本地自有词典导入**
+   - 全部支持 HTTP `Range` 断点续传、完整性校验与 Room 原子事务替换：
+     - **英英公版权威**：[韦氏英英大词典 (Webster's Unabridged 公版)](https://github.com/matthewreagan/WebstersEnglishDictionary)（~28 MB，约 10.2 万词条）
+     - **英汉大词库（含柯林斯星级 / 牛津3000 标注）**：[ECDICT 标准版](https://github.com/skywind3000/ECDICT)（77 万词，~66 MB）、[ECDICT 增强终极版](https://github.com/skywind3000/ECDICT-ultimate/releases)（340 万词，~94 MB）
+     - **9 本含真实中英双语例句词库**（[kajweb/dict](https://github.com/kajweb/dict)：专八、TOEFL、GRE、考研、SAT、四级、六级、雅思、商务英语 BEC，自动与 ECDICT 合并补全例句）
+     - **汉英词典**：[CC-CEDICT 汉英大词典](https://www.mdbg.net/chinese/dictionary?page=cedict)（12.5 万词，~4 MB）
+     - **中文词典**：[中华新华字典](https://github.com/pwxcoo/chinese-xinhua)（汉字、成语、词语、歇后语 4 套独立库）
+   - **本地自有词典导入**：受版权限制，现代商业版权词典（如牛津高阶、柯林斯 COBUILD、现代韦氏、新汉英大词典等）不内置下载链接；如你本地已有合法获取的 CSV/TSV/JSON/GZ/ZIP 格式词典，可在「词库」页点击「导入本地自有词典」直接导入并建立 FTS 索引。
+2. **FTS4 毫秒级查词 + 英语拼写纠错模糊匹配**
+   - Room v3 接入 `@Fts4` 全文倒排索引（附显式 `MIGRATION_1_2` 与 `MIGRATION_2_3`），彻底消除 77 万/340 万词库的全表扫描。
+   - 查词采用 4 阶段加速：B-Tree 精确/前缀索引 → 英语词形还原（如 `studies → study`）→ FTS4 倒排全文匹配 → 索引化 **Damerau-Levenshtein 拼写纠错**（自动纠正漏字、多字、换位如 `recieve → receive`、`accomodate → accommodate`）。
+3. **纯离线真人感神经语音朗读（Sherpa-ONNX + Piper VITS）**
+   - 集成 [Sherpa-ONNX v1.12.31](https://github.com/k2-fsa/sherpa-onnx/releases)（保留内置 `espeak-ng`），支持断点下载 3 款 [Piper 英文离线神经语音模型](https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models)（美音 Amy 20 MB、美音 Lessac 63 MB、英音 Alan 63 MB），并自动回退系统离线 TTS。
+4. **Gemini API 深度翻译（可选）+ 有道单词本导入导出 + SM-2 遗忘曲线复习**
+   - 不填 Gemini Key 也可完整离线使用；支持无 Root ADB 导入有道单词本（`tools/adb_import_youdao.py`）与防丢卡的本轮重学队列。
 
 ## 编译与构建
-
-### 方式一：Android Studio 本地编译（推荐）
-1. 解压源码包，使用 Android Studio (Ladybug / 2024.2+) 打开 `GeminiDictAndroid` 目录。
-2. 连接手机或模拟器点击 **Run** 安装，或点击 **Build -> Build Bundle(s) / APK(s) -> Build APK(s)** 生成 APK。
-
-### 方式二：命令行本地编译（需本机已安装 Gradle 8.9+ 与 Android SDK 35）
-```bash
-gradle testDebugUnitTest
-gradle assembleDebug
-```
-
-### 方式三：GitHub Actions 自动构建 APK
-仓库已内置 `.github/workflows/android-build.yml`（显式配置 JDK 17、Android SDK 35、Gradle 8.9）。推送至 GitHub 后自动运行单元测试并构建，构建成功后直接发布到 **Releases**（只保留最新一版，旧版自动删除），在仓库的 Releases 页下载 APK 即可。
+- **Android Studio**：解压后打开 `GeminiDictAndroid`，构建时自动拉取 `sherpa-onnx-1.12.31.aar`。
+- **GitHub Actions**：推送至 GitHub 即可自动拉取 AAR、运行全部 JUnit 单元测试并生成 `GeminiDict-debug-apk`。

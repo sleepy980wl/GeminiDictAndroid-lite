@@ -1,8 +1,39 @@
+import java.net.URI
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
+}
+
+// Sherpa-ONNX v1.12.31 includes built-in espeak-ng/piper-phonemize for full offline English Piper VITS models
+val sherpaOnnxVersion = "1.12.31"
+val sherpaOnnxAarFile = file("libs/sherpa-onnx-$sherpaOnnxVersion.aar")
+val sherpaOnnxAarUrl =
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$sherpaOnnxVersion/sherpa-onnx-$sherpaOnnxVersion.aar"
+
+val downloadSherpaOnnxAar by tasks.registering {
+    description = "Downloads prebuilt Sherpa-ONNX Android AAR if not present in app/libs/"
+    outputs.file(sherpaOnnxAarFile)
+    onlyIf { !sherpaOnnxAarFile.exists() }
+    doLast {
+        sherpaOnnxAarFile.parentFile.mkdirs()
+        val tmp = file("${sherpaOnnxAarFile.absolutePath}.tmp")
+        logger.lifecycle("Downloading Sherpa-ONNX AAR from $sherpaOnnxAarUrl ...")
+        URI(sherpaOnnxAarUrl).toURL().openStream().use { input ->
+            tmp.outputStream().use { output -> input.copyTo(output) }
+        }
+        if (!tmp.renameTo(sherpaOnnxAarFile)) {
+            tmp.copyTo(sherpaOnnxAarFile, overwrite = true)
+            tmp.delete()
+        }
+        logger.lifecycle("Saved ${sherpaOnnxAarFile.name} (${sherpaOnnxAarFile.length()} bytes)")
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn(downloadSherpaOnnxAar)
 }
 
 android {
@@ -13,12 +44,15 @@ android {
         applicationId = "com.geminidict.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 5
+        versionName = "1.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
     }
 
@@ -91,11 +125,18 @@ dependencies {
     // Encrypted storage for Gemini API Key
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
+    // Pure-Java tar.bz2 extraction for Piper VITS neural voice archives
+    implementation("org.apache.commons:commons-compress:1.27.1")
+
+    // Sherpa-ONNX offline neural TTS runtime (auto-downloaded into app/libs/)
+    implementation(files("libs/sherpa-onnx-$sherpaOnnxVersion.aar"))
+
     // Unit Testing
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     testImplementation("com.google.code.gson:gson:2.11.0")
     testImplementation("net.sf.kxml:kxml2:2.3.0")
+    testImplementation("org.apache.commons:commons-compress:1.27.1")
 
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")

@@ -1,6 +1,7 @@
 package com.geminidict.app.data.dict
 
 import android.content.Context
+import android.net.Uri
 import android.os.SystemClock
 import androidx.room.withTransaction
 import com.geminidict.app.data.local.AppDatabase
@@ -18,6 +19,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
@@ -28,14 +30,6 @@ data class DownloadProgress(
     val message: String
 )
 
-/**
- * Downloads public open-source offline dictionaries with:
- * - HTTP Range resumable downloads (.part files preserved across network errors or cancellations)
- * - Content-Length / Content-Range integrity verification before touching DB
- * - Throttled progress updates (max ~6 updates/sec)
- * - Cooperative cancellation (cancels active OkHttp call)
- * - Atomic Room transaction (old dictionary stays intact if download/parse fails)
- */
 class DictionaryDownloader(
     private val context: Context,
     private val db: AppDatabase,
@@ -93,17 +87,15 @@ class DictionaryDownloader(
             downloadWithResume(item, effectiveUrl, partFile, onProgress)
 
             coroutineContext.ensureActive()
-            onProgress(DownloadProgress(item.id, "importing", -1f, "正在校验并原子写入离线库..."))
+            onProgress(DownloadProgress(item.id, "importing", -1f, "正在校验并原子写入离线库与 FTS 索引..."))
             val importedCount = importLocalFileAtomic(partFile, item.format, item.id, item.name, item.categoryLabel)
             if (importedCount <= 0) {
                 throw IOException("解析完成但未获得有效词条，已回滚以保留原有词库。")
             }
-            // Only remove .part cache AFTER atomic DB import succeeds
             if (partFile.exists()) partFile.delete()
             onProgress(DownloadProgress(item.id, "done", 1f, "已安装 $importedCount 条词目"))
             Result.success(importedCount)
         } catch (ce: CancellationException) {
-            // Preserve .part file so user can resume on next tap
             val savedMb = partFile.length() / (1024.0 * 1024.0)
             val msg = if (partFile.length() > 0) {
                 String.format("已取消下载（已缓存 %.1f MB，再次点击可断点续传）", savedMb)
@@ -126,6 +118,54 @@ class DictionaryDownloader(
         }
     }
 
+    /**
+     * Allows users to import their own legally obtained local dictionaries (CSV, TSV, JSON, GZ, ZIP)
+     * directly via Android Storage Access Framework into the fast FTS4 offline engine.
+     */
+    suspend fun importUserLocalUri(uri: Uri, displayName: String): Result<Int> = withContext(Dispatchers.IO) {
+        val lower = displayName.lowercase(Locale.ROOT)
+        val safeId = "local_${displayName.hashCode().toUInt()}"
+        val cacheFile = File(context.cacheDir, "user_dict_import.tmp")
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(cacheFile).use { output -> input.copyTo(output) }
+            } ?: throw IOException("无法读取所选文件")
+
+            val count = db.withTransaction {
+                db.dictionaryDao().deleteBySource(safeId)
+                FileInputStream(cacheFile).use { fis ->
+                    when {
+                        lower.endsWith(".tsv") || lower.endsWith(".txt") ->
+                            DictionaryParsers.parseSimpleTsvStream(fis, safeId) { db.dictionaryDao().insertAll(it) }
+                        lower.endsWith(".json") ->
+                            DictionaryParsers.parseWebstersJsonStream(fis, safeId) { db.dictionaryDao().insertAll(it) }
+                        lower.endsWith(".gz") ->
+                            DictionaryParsers.parseCedictStream(fis, isGzip = true, sourceId = safeId) { db.dictionaryDao().insertAll(it) }
+                        lower.endsWith(".zip") ->
+                            DictionaryParsers.parseEcdictCsvZipStream(fis, safeId) { db.dictionaryDao().insertAll(it) }
+                        else ->
+                            DictionaryParsers.parseEcdictCsvStream(fis, safeId) { db.dictionaryDao().insertAll(it) }
+                    }
+                }.also { imported ->
+                    if (imported <= 0) throw IOException("未解析到有效词条，请检查文件是否为 CSV/TSV/JSON/ZIP 格式")
+                    db.downloadedDictDao().upsert(
+                        DownloadedDictEntity(
+                            id = safeId,
+                            name = "本地导入：$displayName",
+                            category = "自定义",
+                            entryCount = imported
+                        )
+                    )
+                }
+            }
+            Result.success(count)
+        } catch (e: Exception) {
+            Result.failure(e)
+        } finally {
+            if (cacheFile.exists()) cacheFile.delete()
+        }
+    }
+
     private suspend fun downloadWithResume(
         item: DictionaryCatalogItem,
         effectiveUrl: String,
@@ -133,9 +173,8 @@ class DictionaryDownloader(
         onProgress: (DownloadProgress) -> Unit,
         allowRetryOn416: Boolean = true
     ) {
-        // Capture the coroutine context here: inside the nested `use {}` blocks
-        // below the CoroutineScope receiver is lost, so `coroutineContext`
-        // is unresolved there (compile error at old line 181).
+        // Capture here: inside the nested use{} blocks below the CoroutineScope
+        // receiver is lost, so bare `coroutineContext` is unresolved (compile error).
         val coroutineContext = currentCoroutineContext()
         val existingBytes = if (partFile.exists()) partFile.length() else 0L
         val resumeLabel = if (existingBytes > 0L) {
@@ -147,7 +186,7 @@ class DictionaryDownloader(
 
         val reqBuilder = Request.Builder()
             .url(effectiveUrl)
-            .header("User-Agent", "GeminiDictAndroid/1.2")
+            .header("User-Agent", "GeminiDictAndroid/1.4")
         if (existingBytes > 0L) {
             reqBuilder.header("Range", "bytes=$existingBytes-")
         }
@@ -157,7 +196,6 @@ class DictionaryDownloader(
 
         call.execute().use { response ->
             if (response.code == 416 && existingBytes > 0L && allowRetryOn416) {
-                // Range not satisfiable (file may already be complete or upstream changed): reset & retry once
                 partFile.delete()
                 downloadWithResume(item, effectiveUrl, partFile, onProgress, allowRetryOn416 = false)
                 return
@@ -224,8 +262,7 @@ class DictionaryDownloader(
         if (header.isNullOrBlank()) return null
         val slash = header.lastIndexOf('/')
         if (slash < 0) return null
-        val totalPart = header.substring(slash + 1).trim()
-        return totalPart.toLongOrNull()
+        return header.substring(slash + 1).trim().toLongOrNull()
     }
 
     suspend fun importLocalFileAtomic(
@@ -241,6 +278,18 @@ class DictionaryDownloader(
                     DictFormat.ECDICT_CSV -> {
                         db.dictionaryDao().deleteBySource(sourceId)
                         DictionaryParsers.parseEcdictCsvStream(fis, sourceId = sourceId) { batch ->
+                            db.dictionaryDao().insertAll(batch)
+                        }
+                    }
+                    DictFormat.ECDICT_CSV_ZIP -> {
+                        db.dictionaryDao().deleteBySource(sourceId)
+                        DictionaryParsers.parseEcdictCsvZipStream(fis, sourceId = sourceId) { batch ->
+                            db.dictionaryDao().insertAll(batch)
+                        }
+                    }
+                    DictFormat.WEBSTERS_JSON -> {
+                        db.dictionaryDao().deleteBySource(sourceId)
+                        DictionaryParsers.parseWebstersJsonStream(fis, sourceId = sourceId) { batch ->
                             db.dictionaryDao().insertAll(batch)
                         }
                     }

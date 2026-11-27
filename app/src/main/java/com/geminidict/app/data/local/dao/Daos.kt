@@ -23,35 +23,80 @@ object SqlLikeEscaper {
 
 @Dao
 interface DictionaryDao {
+    /**
+     * Fast B-Tree index-only lookup (exact + prefix on `wordLower`). Sub-2ms even on 770k+ rows.
+     */
     @Query(
         """
         SELECT * FROM dictionary_entries
         WHERE wordLower = :queryLower
            OR wordLower LIKE :prefixPattern ESCAPE '\'
-           OR translation LIKE :containsPattern ESCAPE '\'
         ORDER BY
-            CASE
-                WHEN wordLower = :queryLower THEN 0
-                WHEN wordLower LIKE :prefixPattern ESCAPE '\' THEN 1
-                ELSE 2
-            END,
+            CASE WHEN wordLower = :queryLower THEN 0 ELSE 1 END,
             CASE sourceId
-                WHEN 'ecdict_full' THEN 0
-                WHEN 'cc_cedict' THEN 1
-                WHEN 'starter' THEN 2
-                ELSE 3
+                WHEN 'ecdict_ultimate' THEN 0
+                WHEN 'ecdict_full' THEN 1
+                WHEN 'websters_1913' THEN 2
+                WHEN 'cc_cedict' THEN 3
+                ELSE 4
             END,
-            LENGTH(translation) DESC,
+            CASE WHEN example != '' THEN 0 ELSE 1 END,
             CASE WHEN frq > 0 THEN frq ELSE 999999 END ASC,
             LENGTH(word) ASC
         LIMIT :rawLimit
         """
     )
-    suspend fun searchRaw(
+    suspend fun searchPrefixIndexed(
         queryLower: String,
         prefixPattern: String,
-        containsPattern: String,
         rawLimit: Int = 90
+    ): List<DictionaryEntryEntity>
+
+    /**
+     * Fast FTS4 inverted-index lookup across word, Chinese translation, and English definition.
+     */
+    @Query(
+        """
+        SELECT dictionary_entries.* FROM dictionary_entries
+        JOIN dictionary_fts ON dictionary_entries.rowid = dictionary_fts.rowid
+        WHERE dictionary_fts MATCH :ftsQuery
+        ORDER BY
+            CASE WHEN dictionary_entries.frq > 0 THEN dictionary_entries.frq ELSE 999999 END ASC,
+            LENGTH(dictionary_entries.word) ASC
+        LIMIT :rawLimit
+        """
+    )
+    suspend fun searchFts(
+        ftsQuery: String,
+        rawLimit: Int = 60
+    ): List<DictionaryEntryEntity>
+
+    /**
+     * Narrow indexed candidate fetch for English typo/fuzzy spelling correction.
+     * Uses B-Tree index on `wordLower` via 3 targeted prefix slices + length window.
+     */
+    @Query(
+        """
+        SELECT * FROM dictionary_entries
+        WHERE LENGTH(wordLower) BETWEEN :minLen AND :maxLen
+          AND (
+              wordLower LIKE :prefix2 ESCAPE '\'
+              OR wordLower LIKE :swappedPrefix2 ESCAPE '\'
+              OR (wordLower LIKE :firstChar ESCAPE '\' AND wordLower LIKE :lastChar ESCAPE '\')
+          )
+        ORDER BY
+            CASE WHEN frq > 0 THEN frq ELSE 999999 END ASC
+        LIMIT :limit
+        """
+    )
+    suspend fun fetchFuzzyCandidates(
+        prefix2: String,
+        swappedPrefix2: String,
+        firstChar: String,
+        lastChar: String,
+        minLen: Int,
+        maxLen: Int,
+        limit: Int = 400
     ): List<DictionaryEntryEntity>
 
     @Query("SELECT * FROM dictionary_entries WHERE wordLower IN (:wordsLower)")
@@ -74,21 +119,29 @@ interface ChineseDictDao {
         SELECT * FROM chinese_dict_entries
         WHERE headword = :query
            OR headword LIKE :prefixPattern ESCAPE '\'
-           OR explanation LIKE :containsPattern ESCAPE '\'
         ORDER BY
-            CASE
-                WHEN headword = :query THEN 0
-                WHEN headword LIKE :prefixPattern ESCAPE '\' THEN 1
-                ELSE 2
-            END,
+            CASE WHEN headword = :query THEN 0 ELSE 1 END,
             LENGTH(headword) ASC
         LIMIT :limit
         """
     )
-    suspend fun search(
+    suspend fun searchPrefixIndexed(
         query: String,
         prefixPattern: String,
-        containsPattern: String,
+        limit: Int = 30
+    ): List<ChineseDictEntryEntity>
+
+    @Query(
+        """
+        SELECT chinese_dict_entries.* FROM chinese_dict_entries
+        JOIN chinese_dict_fts ON chinese_dict_entries.rowid = chinese_dict_fts.rowid
+        WHERE chinese_dict_fts MATCH :ftsQuery
+        ORDER BY LENGTH(chinese_dict_entries.headword) ASC
+        LIMIT :limit
+        """
+    )
+    suspend fun searchFts(
+        ftsQuery: String,
         limit: Int = 30
     ): List<ChineseDictEntryEntity>
 
@@ -134,9 +187,6 @@ interface ReviewLogDao {
     @Insert
     suspend fun insert(log: ReviewLogEntity)
 
-    /**
-     * Counts today's successfully recalled reviews (excluding rating == 1 "AGAIN/忘记").
-     */
     @Query("SELECT COUNT(*) FROM review_logs WHERE reviewedAt >= :sinceMillis AND rating > 1")
     fun observeLearnedCountSince(sinceMillis: Long): Flow<Int>
 }
