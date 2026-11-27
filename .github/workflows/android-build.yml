@@ -78,11 +78,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          TAG="v${{ steps.version.outputs.version }}-${{ github.run_number }}"
+          TAG="v${{ steps.version.outputs.version }}"
           APK=app/build/outputs/apk/debug/GeminiDict-lite.apk
           ls -l "$APK"
           gh release create "$TAG" "$APK" \
-            --title "GeminiDictAndroid v${{ steps.version.outputs.version }} (build ${{ github.run_number }})" \
+            --title "GeminiDictAndroid v${{ steps.version.outputs.version }}" \
             --notes "自动构建：单元测试通过后的 Debug APK（GeminiDict-lite.apk）。安装后在设置页填写 Gemini API Key 即可使用 AI 翻译；不填 Key 也可完整离线使用。"
           # Delete every older release (with its tag) so only the latest remains.
           for t in $(gh release list --limit 100 --json tagName --jq '.[].tagName' | grep -v "^${TAG}$" || true); do

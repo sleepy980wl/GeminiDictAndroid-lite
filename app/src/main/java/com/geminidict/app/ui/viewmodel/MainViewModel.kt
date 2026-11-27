@@ -95,6 +95,9 @@ data class MainUiState(
     val sessionRelearnIds: Set<Long> get() = sessionRelearnPool.keys
 }
 
+/** One example sentence shown under the Chinese meaning on the review answer side. */
+data class ReviewExample(val sentence: String, val translation: String)
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as GeminiDictApplication
     private val db = app.database
@@ -428,8 +431,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val words = targets.map { it.wordLower }.distinct()
             val candidates = db.dictionaryDao().getExamplesForWords(words)
             if (candidates.isEmpty()) {
+                // Name what is actually downloaded: ECDICT / Webster's /
+                // CC-CEDICT carry no example sentences at all, so "downloaded
+                // a dictionary" alone does not mean examples exist.
+                val downloadedNames = downloadedDicts.value.map { it.name }
                 _uiState.value = _uiState.value.copy(
-                    statusBanner = "没有已下载的词库带有双语例句，请先在「词库」页下载含双语例句的词库（如专八、TOEFL、考研）。"
+                    statusBanner = if (downloadedNames.isEmpty()) {
+                        "还没有下载任何词库，请先在「词库」页下载含双语例句的词库（如专八、TOEFL、考研）。"
+                    } else {
+                        val shown = downloadedNames.take(3).joinToString("、")
+                        "已下载的「$shown」都不带双语例句；带例句的是专八、TOEFL、考研、四六级、雅思、GRE、SAT、商务英语，请下载其中一个。"
+                    }
                 )
                 return@launch
             }
@@ -785,6 +797,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun flipReviewCard() {
         _uiState.value = _uiState.value.copy(isCardFlipped = !_uiState.value.isCardFlipped)
+    }
+
+    /**
+     * Example shown under the Chinese meaning on the review answer side.
+     * Prefer the word's own stored example; otherwise look up the best
+     * matching example from an already-downloaded dictionary that carries
+     * bilingual examples (same rule as the wordbook's 例句 fill), so words
+     * added after the fill — or words the fill could not cover — still show
+     * an example while reviewing. Null = no example available anywhere.
+     */
+    private val _reviewExample = MutableStateFlow<ReviewExample?>(null)
+    val reviewExample: StateFlow<ReviewExample?> = _reviewExample.asStateFlow()
+
+    fun resolveReviewExample(entry: WordbookEntryEntity) {
+        if (entry.exampleSentence.isNotBlank()) {
+            _reviewExample.value = ReviewExample(entry.exampleSentence, entry.exampleTranslation)
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val best = db.dictionaryDao().getExamplesForWords(listOf(entry.wordLower))
+                .sortedWith(
+                    compareBy(
+                        { if (it.sourceId.startsWith("kajweb_")) 0 else 1 },
+                        { it.example.length }
+                    )
+                ).firstOrNull()
+            // The user may already have moved on; only publish for the card
+            // still on screen.
+            val current = _uiState.value.reviewQueue.getOrNull(_uiState.value.currentReviewIndex)
+            if (current?.id == entry.id) {
+                _reviewExample.value = best?.let { ReviewExample(it.example, it.exampleTranslation) }
+            }
+        }
+    }
+
+    fun clearReviewExample() {
+        _reviewExample.value = null
     }
 
     fun submitReviewRating(rating: ReviewRating) {

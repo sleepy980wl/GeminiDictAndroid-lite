@@ -74,20 +74,31 @@ fun ReviewScreen(viewModel: MainViewModel) {
     val remainingCount = (uiState.reviewQueue.size - uiState.currentReviewIndex).coerceAtLeast(0)
     val currentCard = uiState.reviewQueue.getOrNull(uiState.currentReviewIndex)
     val isRelearning = currentCard != null && currentCard.id in uiState.sessionRelearnIds
+    val reviewExample by viewModel.reviewExample.collectAsStateWithLifecycle()
 
     // Auto-read: when a new card appears, read the word once in the accent
     // chosen in Settings (speakEnglish with no override uses the saved
-    // accent); when the answer is revealed, read its example sentence once.
+    // accent); when the answer is revealed, resolve the example shown
+    // under the Chinese meaning and read it once.
     val currentCardId = currentCard?.id
     val isCardFlipped = uiState.isCardFlipped
     LaunchedEffect(currentCardId) {
+        viewModel.clearReviewExample()
         val card = currentCard
         if (card != null) viewModel.speakEnglish(card.word)
     }
     LaunchedEffect(isCardFlipped) {
-        val card = currentCard
-        if (isCardFlipped && card != null && card.exampleSentence.isNotBlank()) {
-            viewModel.speakEnglish(card.exampleSentence)
+        if (isCardFlipped) {
+            val card = currentCard
+            if (card != null) viewModel.resolveReviewExample(card)
+        } else {
+            viewModel.clearReviewExample()
+        }
+    }
+    LaunchedEffect(reviewExample) {
+        val example = reviewExample
+        if (isCardFlipped && example != null) {
+            viewModel.speakEnglish(example.sentence)
         }
     }
 
@@ -346,24 +357,24 @@ fun ReviewScreen(viewModel: MainViewModel) {
                         style = MaterialTheme.typography.titleMedium,
                         textAlign = TextAlign.Center
                     )
-                    if (currentCard.exampleSentence.isNotBlank()) {
+                    if (reviewExample != null) {
                         Spacer(Modifier.height(12.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = currentCard.exampleSentence,
+                                    text = reviewExample!!.sentence,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                if (currentCard.exampleTranslation.isNotBlank()) {
+                                if (reviewExample!!.translation.isNotBlank()) {
                                     Text(
-                                        text = currentCard.exampleTranslation,
+                                        text = reviewExample!!.translation,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
-                            IconButton(onClick = { viewModel.speakEnglish(currentCard.exampleSentence) }) {
+                            IconButton(onClick = { viewModel.speakEnglish(reviewExample!!.sentence) }) {
                                 Icon(
                                     AppleIcons.SpeakerWave,
                                     contentDescription = "朗读例句",
