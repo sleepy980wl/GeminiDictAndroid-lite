@@ -2,7 +2,6 @@ package com.geminidict.app
 
 import android.app.Application
 import com.geminidict.app.data.dict.DictionaryDownloader
-import com.geminidict.app.data.dict.PrebuiltEcdictRepository
 import com.geminidict.app.data.local.AppDatabase
 import com.geminidict.app.data.remote.GeminiTranslationService
 import com.geminidict.app.data.security.SecurePrefsManager
@@ -16,8 +15,6 @@ class GeminiDictApplication : Application() {
         private set
     lateinit var geminiService: GeminiTranslationService
         private set
-    lateinit var prebuiltEcdict: PrebuiltEcdictRepository
-        private set
     lateinit var dictionaryDownloader: DictionaryDownloader
         private set
     lateinit var neuralVoiceDownloader: NeuralVoiceDownloader
@@ -30,7 +27,6 @@ class GeminiDictApplication : Application() {
         database = AppDatabase.getInstance(this)
         securePrefs = SecurePrefsManager(this)
         geminiService = GeminiTranslationService()
-        prebuiltEcdict = PrebuiltEcdictRepository(this)
         dictionaryDownloader = DictionaryDownloader(this, database, securePrefs)
         neuralVoiceDownloader = NeuralVoiceDownloader(this, securePrefs)
         ttsManager = OfflineTtsManager(this, neuralVoiceDownloader).apply {
@@ -44,7 +40,6 @@ class GeminiDictApplication : Application() {
 
     override fun onTerminate() {
         super.onTerminate()
-        prebuiltEcdict.close()
         ttsManager.shutdown()
     }
 }

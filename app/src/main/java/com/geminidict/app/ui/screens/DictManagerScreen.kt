@@ -46,8 +46,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geminidict.app.data.dict.DictionaryCatalogItem
 import com.geminidict.app.data.dict.DownloadProgress
-import com.geminidict.app.data.dict.PrebuiltDbState
-import com.geminidict.app.data.dict.PrebuiltEcdictRepository
 import com.geminidict.app.data.local.entity.DownloadedDictEntity
 import com.geminidict.app.data.tts.NeuralVoiceModelItem
 import com.geminidict.app.ui.icons.AppleIcons
@@ -58,8 +56,6 @@ fun DictManagerScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val installedList by viewModel.downloadedDicts.collectAsStateWithLifecycle()
-    val prebuiltState by viewModel.prebuiltState.collectAsStateWithLifecycle()
-    val prebuiltCount = (prebuiltState as? PrebuiltDbState.Ready)?.entryCount ?: 0
     val installedMap = installedList.associateBy { it.id }
 
     var subTab by remember { mutableIntStateOf(0) } // 0=离线词典, 1=神经语音包
@@ -133,7 +129,6 @@ fun DictManagerScreen(viewModel: MainViewModel) {
                     DictionaryCatalogCard(
                         item = item,
                         installed = installedMap[item.id],
-                        prebuiltEntryCount = if (item.id == PrebuiltEcdictRepository.SOURCE_ID) prebuiltCount else 0,
                         progress = uiState.activeDownloads[item.id],
                         onDownloadClick = {
                             if (item.approxSizeMb >= 15) {
@@ -407,7 +402,6 @@ private fun NeuralVoiceCard(
 private fun DictionaryCatalogCard(
     item: DictionaryCatalogItem,
     installed: DownloadedDictEntity?,
-    prebuiltEntryCount: Int = 0,
     progress: DownloadProgress?,
     onDownloadClick: () -> Unit,
     onCancel: () -> Unit,
@@ -501,22 +495,7 @@ private fun DictionaryCatalogCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    if (prebuiltEntryCount > 0) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                AppleIcons.CheckmarkCircle,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.tertiary
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = "安装包已内置 ($prebuiltEntryCount 条 · 已预建索引)",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.tertiary
-                            )
-                        }
-                    } else if (installed != null) {
+                    if (installed != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 AppleIcons.CheckmarkCircle,

@@ -45,8 +45,8 @@ android {
         applicationId = "com.geminidict.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.6.1"
+        versionCode = 8
+        versionName = "1.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -70,13 +70,13 @@ android {
         }
     }
 
-    // APK is built directly as GeminiDict.apk (no post-build copy/rename in CI).
+    // APK is built directly as GeminiDict-lite.apk (no post-build copy/rename in CI).
     // NOTE: AGP 8.7's new VariantOutput API has no outputFileName property
     // (verified against gradle-api-8.7.2.jar); the old ApkVariantOutput API does.
     applicationVariants.all {
         outputs.all {
             if (this is ApkVariantOutput) {
-                outputFileName = "GeminiDict.apk"
+                outputFileName = "GeminiDict-lite.apk"
             }
         }
     }
@@ -86,10 +86,9 @@ android {
     // installs as an update over the previous version. Without this, each
     // GitHub runner generates a fresh random debug key and Android refuses
     // to update ("signatures do not match"), forcing an uninstall first.
+    // NOTE: a bare `debug { }` inside signingConfigs resolves to the
+    // buildTypes debug container in Kotlin DSL; address it by name.
     signingConfigs {
-        // NOTE: a bare `debug { }` here resolves to the buildTypes debug
-        // container in Kotlin DSL; the signing config must be addressed
-        // by name.
         getByName("debug") {
             storeFile = file("debug.keystore")
             storePassword = "android"
@@ -111,10 +110,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
-    }
-
-    androidResources {
-        noCompress += listOf("gz")
     }
 
     packaging {
