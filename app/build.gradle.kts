@@ -1,4 +1,5 @@
 import java.net.URI
+import com.android.build.gradle.api.ApkVariantOutput
 
 plugins {
     id("com.android.application")
@@ -66,6 +67,17 @@ android {
         }
     }
 
+    // APK is built directly as GeminiDict.apk (no post-build copy/rename in CI).
+    // NOTE: AGP 8.7's new VariantOutput API has no outputFileName property
+    // (verified against gradle-api-8.7.2.jar); the old ApkVariantOutput API does.
+    applicationVariants.all {
+        outputs.all {
+            if (this is ApkVariantOutput) {
+                outputFileName = "GeminiDict.apk"
+            }
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -89,14 +101,6 @@ android {
 
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
-}
-// APK is built directly as GeminiDict.apk (no post-build copy/rename in CI).
-androidComponents {
-    onVariants { variant ->
-        variant.outputs.forEach { output ->
-            output.outputFileName.set("GeminiDict.apk")
-        }
-    }
 }
 
 
