@@ -98,6 +98,17 @@ interface DictionaryDao {
     @Query("SELECT * FROM dictionary_entries WHERE wordLower IN (:wordsLower)")
     suspend fun getExactBatch(wordsLower: List<String>): List<DictionaryEntryEntity>
 
+    /**
+     * Example sentences for exact word matches, from already-downloaded
+     * dictionaries only (the kajweb exam books carry bilingual examples).
+     * Used by the wordbook's one-tap example fill: one best sentence per word.
+     */
+    @Query("SELECT * FROM dictionary_entries WHERE wordLower IN (:wordsLower) AND example != ''")
+    suspend fun getExamplesForWords(wordsLower: List<String>): List<DictionaryEntryEntity>
+
+    @Query("SELECT COUNT(*) FROM dictionary_entries WHERE example != ''")
+    suspend fun countEntriesWithExample(): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(entries: List<DictionaryEntryEntity>)
 

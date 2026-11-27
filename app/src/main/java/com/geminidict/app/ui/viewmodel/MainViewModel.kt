@@ -408,6 +408,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * One-tap example fill for "我的单词本": for every word in 我的单词本
+     * that has no example sentence yet, take the single best-matching
+     * example from an already-downloaded dictionary that carries bilingual
+     * examples (the kajweb exam books). Best = exact word match, kajweb
+     * sources first, then the shortest example. Words with no match in any
+     * downloaded dictionary are left untouched and counted in the result.
+     * Idempotent: running it again only touches words still missing one.
+     */
+    fun fillMissingExamples() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val targets = db.wordbookDao().getByGroupSnapshot("我的单词本")
+                .filter { it.exampleSentence.isBlank() }
+            if (targets.isEmpty()) {
+                _uiState.value = _uiState.value.copy(statusBanner = "我的单词本里没有例句的单词都已经有例句了。")
+                return@launch
+            }
+            val words = targets.map { it.wordLower }.distinct()
+            val candidates = db.dictionaryDao().getExamplesForWords(words)
+            if (candidates.isEmpty()) {
+                _uiState.value = _uiState.value.copy(
+                    statusBanner = "没有已下载的词库带有双语例句，请先在「词库」页下载含双语例句的词库（如专八、TOEFL、考研）。"
+                )
+                return@launch
+            }
+            val bestByWord = candidates.groupBy { it.wordLower }.mapValues { (_, list) ->
+                list.sortedWith(
+                    compareBy(
+                        { if (it.sourceId.startsWith("kajweb_")) 0 else 1 },
+                        { it.example.length }
+                    )
+                ).first()
+            }
+            val now = System.currentTimeMillis()
+            var filled = 0
+            for (entry in targets) {
+                val best = bestByWord[entry.wordLower] ?: continue
+                db.wordbookDao().update(
+                    entry.copy(
+                        exampleSentence = best.example,
+                        exampleTranslation = best.exampleTranslation,
+                        updatedAt = now
+                    )
+                )
+                filled++
+            }
+            val missing = targets.size - filled
+            _uiState.value = _uiState.value.copy(
+                statusBanner = if (missing > 0) {
+                    "已为 $filled 个单词补上例句，$missing 个在已下载词库中没找到例句。"
+                } else {
+                    "已为 $filled 个单词补上例句。"
+                }
+            )
+        }
+    }
+
     fun saveGeminiToWordbook(result: GeminiTranslationResult) {
         viewModelScope.launch(Dispatchers.IO) {
             val wordLower = result.sourceText.trim().lowercase(Locale.ROOT)

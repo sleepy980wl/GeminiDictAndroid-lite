@@ -217,6 +217,17 @@ fun WordbookScreen(viewModel: MainViewModel) {
                     Text("导入", fontWeight = FontWeight.Medium)
                 }
                 OutlinedButton(
+                    onClick = { viewModel.fillMissingExamples() },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant),
+                    contentPadding = PaddingValues(vertical = 10.dp)
+                ) {
+                    Icon(AppleIcons.BookClosed, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("例句", fontWeight = FontWeight.Medium)
+                }
+                OutlinedButton(
                     onClick = { exportLauncher.launch("my_wordbook_youdao.xml") },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),

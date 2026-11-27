@@ -32,6 +32,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,6 +74,22 @@ fun ReviewScreen(viewModel: MainViewModel) {
     val remainingCount = (uiState.reviewQueue.size - uiState.currentReviewIndex).coerceAtLeast(0)
     val currentCard = uiState.reviewQueue.getOrNull(uiState.currentReviewIndex)
     val isRelearning = currentCard != null && currentCard.id in uiState.sessionRelearnIds
+
+    // Auto-read: when a new card appears, read the word once in the accent
+    // chosen in Settings (speakEnglish with no override uses the saved
+    // accent); when the answer is revealed, read its example sentence once.
+    val currentCardId = currentCard?.id
+    val isCardFlipped = uiState.isCardFlipped
+    LaunchedEffect(currentCardId) {
+        val card = currentCard
+        if (card != null) viewModel.speakEnglish(card.word)
+    }
+    LaunchedEffect(isCardFlipped) {
+        val card = currentCard
+        if (isCardFlipped && card != null && card.exampleSentence.isNotBlank()) {
+            viewModel.speakEnglish(card.exampleSentence)
+        }
+    }
 
     Column(
         modifier = Modifier
