@@ -87,7 +87,10 @@ android {
     // GitHub runner generates a fresh random debug key and Android refuses
     // to update ("signatures do not match"), forcing an uninstall first.
     signingConfigs {
-        debug {
+        // NOTE: a bare `debug { }` here resolves to the buildTypes debug
+        // container in Kotlin DSL; the signing config must be addressed
+        // by name.
+        getByName("debug") {
             storeFile = file("debug.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
