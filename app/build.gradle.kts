@@ -45,8 +45,8 @@ android {
         applicationId = "com.geminidict.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.6.0"
+        versionCode = 9
+        versionName = "1.6.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -58,6 +58,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -78,6 +81,21 @@ android {
         }
     }
 
+    // Stable debug signing: a committed app/debug.keystore (debug-only key,
+    // password "android") so every CI build is signed with the SAME key and
+    // installs as an update over the previous version. Without this, each
+    // GitHub runner generates a fresh random debug key and Android refuses
+    // to update ("signatures do not match"), forcing an uninstall first.
+    signingConfigs {
+        debug {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+            storeType = "PKCS12"
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -90,6 +108,10 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    androidResources {
+        noCompress += listOf("gz")
     }
 
     packaging {

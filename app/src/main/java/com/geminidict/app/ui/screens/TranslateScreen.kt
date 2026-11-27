@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.geminidict.app.data.dict.PrebuiltDbState
 import com.geminidict.app.data.local.entity.ChineseDictEntryEntity
 import com.geminidict.app.data.remote.GeminiTranslationResult
 import com.geminidict.app.ui.icons.AppleIcons
@@ -51,6 +52,7 @@ fun TranslateScreen(viewModel: MainViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val wordbook by viewModel.wordbookEntries.collectAsStateWithLifecycle()
     val totalDictCount by viewModel.totalDictCount.collectAsStateWithLifecycle()
+    val prebuiltState by viewModel.prebuiltState.collectAsStateWithLifecycle()
     val bookmarkedSet = remember(wordbook) { wordbook.map { it.wordLower }.toSet() }
 
     Column(
@@ -69,7 +71,34 @@ fun TranslateScreen(viewModel: MainViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        if (totalDictCount in 1..200) {
+        val extracting = prebuiltState as? PrebuiltDbState.Extracting
+        if (extracting != null) {
+            Spacer(Modifier.height(8.dp))
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = extracting.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+        } else if (totalDictCount in 1..200 && prebuiltState !is PrebuiltDbState.Ready) {
             Spacer(Modifier.height(8.dp))
             Card(
                 shape = RoundedCornerShape(14.dp),

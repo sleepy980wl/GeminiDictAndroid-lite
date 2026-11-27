@@ -9,6 +9,7 @@ import com.geminidict.app.GeminiDictApplication
 import com.geminidict.app.data.dict.DictionaryCatalog
 import com.geminidict.app.data.dict.DictionaryCatalogItem
 import com.geminidict.app.data.dict.DownloadProgress
+import com.geminidict.app.data.dict.PrebuiltDbState
 import com.geminidict.app.data.local.dao.SqlLikeEscaper
 import com.geminidict.app.data.local.entity.ChineseDictEntryEntity
 import com.geminidict.app.data.local.entity.DictionaryEntryEntity
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -100,6 +102,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val db = app.database
     private val prefs = app.securePrefs
     private val geminiService = app.geminiService
+    private val prebuiltEcdict = app.prebuiltEcdict
     private val downloader = app.dictionaryDownloader
     private val voiceDownloader = app.neuralVoiceDownloader
     val ttsManager = app.ttsManager
@@ -135,9 +138,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .observeLearnedCountSince(startOfTodayMillis())
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
-    val totalDictCount: StateFlow<Int> = db.dictionaryDao()
-        .observeTotalCount()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val prebuiltState: StateFlow<PrebuiltDbState> = prebuiltEcdict.state
+
+    val totalDictCount: StateFlow<Int> = combine(
+        db.dictionaryDao().observeTotalCount(),
+        prebuiltEcdict.entryCount
+    ) { roomCount, prebuiltCount ->
+        roomCount + prebuiltCount
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     private var searchJob: Job? = null
     private val downloadJobs = ConcurrentHashMap<String, Job>()
@@ -153,6 +161,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             refreshInstalledNeuralVoices()
             refreshReviewQueue()
+        }
+        viewModelScope.launch {
+            prebuiltEcdict.ensureReady()
+            if (_uiState.value.query.isNotBlank() && _uiState.value.translateSubTab == 0) {
+                triggerOfflineSearch(_uiState.value.query, 0)
+            }
         }
     }
 
@@ -238,18 +252,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        val prefixHits = db.dictionaryDao().searchPrefixIndexed(
+        val prebuiltPrefix = prebuiltEcdict.searchPrefixIndexed(
+            queryLower = lower,
+            prefixPattern = "$escapedLower%",
+            rawLimit = 60
+        )
+        val roomPrefix = db.dictionaryDao().searchPrefixIndexed(
             queryLower = lower,
             prefixPattern = "$escapedLower%",
             rawLimit = 90
         )
-        absorb(prefixHits, hint = null, maxTotal = 30)
+        // Absorb ECDICT Ultimate first, then Room entries (which enrich with kajweb bilingual examples)
+        absorb(prebuiltPrefix, hint = null, maxTotal = 30)
+        absorb(roomPrefix, hint = null, maxTotal = 30)
 
         val isEnglish = FuzzyWordMatcher.isAsciiEnglish(lower)
         if (isEnglish && !mergedMap.containsKey(lower)) {
             val stems = FuzzyWordMatcher.generateStemCandidates(lower)
             if (stems.isNotEmpty()) {
+                val prebuiltStems = prebuiltEcdict.getExactBatch(stems)
                 val stemHits = db.dictionaryDao().getExactBatch(stems)
+                absorb(prebuiltStems, hint = "词形还原", maxTotal = 30)
                 absorb(stemHits, hint = "词形还原", maxTotal = 30)
             }
         }
@@ -258,7 +281,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val ftsQuery = FuzzyWordMatcher.toSafeFtsQuery(trimmed)
             if (ftsQuery.isNotEmpty()) {
                 try {
+                    val prebuiltFts = prebuiltEcdict.searchFts(ftsQuery, rawLimit = 50)
                     val ftsHits = db.dictionaryDao().searchFts(ftsQuery, rawLimit = 60)
+                    absorb(prebuiltFts, hint = if (isEnglish) "全文匹配" else null, maxTotal = 30)
                     absorb(ftsHits, hint = if (isEnglish) "全文匹配" else null, maxTotal = 30)
                 } catch (_: Exception) {
                 }
@@ -272,15 +297,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val firstCh = SqlLikeEscaper.escape(lower.take(1)) + "%"
             val lastCh = "%" + SqlLikeEscaper.escape(lower.takeLast(1))
 
-            val candidates = db.dictionaryDao().fetchFuzzyCandidates(
+            val minL = (lower.length - maxDist).coerceAtLeast(2)
+            val maxL = lower.length + maxDist
+            val prebuiltCandidates = prebuiltEcdict.fetchFuzzyCandidates(
+                prefix2 = p2,
+                swappedPrefix2 = swappedP2,
+                minLen = minL,
+                maxLen = maxL,
+                limit = 300
+            )
+            val roomCandidates = db.dictionaryDao().fetchFuzzyCandidates(
                 prefix2 = p2,
                 swappedPrefix2 = swappedP2,
                 firstChar = firstCh,
                 lastChar = lastCh,
-                minLen = (lower.length - maxDist).coerceAtLeast(2),
-                maxLen = lower.length + maxDist,
+                minLen = minL,
+                maxLen = maxL,
                 limit = 400
             )
+            val candidates = prebuiltCandidates + roomCandidates
             val ranked = FuzzyWordMatcher.rankFuzzyCandidates(
                 query = lower,
                 candidates = candidates,
