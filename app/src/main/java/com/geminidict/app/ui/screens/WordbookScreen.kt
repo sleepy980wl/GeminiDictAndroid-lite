@@ -3,9 +3,11 @@ package com.geminidict.app.ui.screens
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,28 +19,27 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -55,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geminidict.app.data.dict.DictionaryCatalog
 import com.geminidict.app.data.local.entity.DictionaryEntryEntity
 import com.geminidict.app.data.local.entity.WordbookEntryEntity
+import com.geminidict.app.ui.icons.AppleIcons
 import com.geminidict.app.ui.viewmodel.MainViewModel
 import com.geminidict.app.ui.viewmodel.WordbookSort
 import java.util.Locale
@@ -70,7 +73,6 @@ fun WordbookScreen(viewModel: MainViewModel) {
     var editingEntry by remember { mutableStateOf<WordbookEntryEntity?>(null) }
     var deletingEntry by remember { mutableStateOf<WordbookEntryEntity?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
-    var showAdbGuide by remember { mutableStateOf(false) }
 
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -95,7 +97,7 @@ fun WordbookScreen(viewModel: MainViewModel) {
         }
     }
 
-    // Build ordered chip list: 全部 -> 我的单词本 -> 已下载词库(专八/TOEFL/GRE/考研/SAT/四级/六级/雅思/商务英语) -> 其他自定义分组
+    // Ordered chip list: 全部 -> 我的单词本 -> 已下载词库 -> 其他自定义分组
     val downloadedIds = remember(downloadedDicts) { downloadedDicts.map { it.id }.toSet() }
     val downloadedBookLabels = remember(downloadedIds) {
         DictionaryCatalog.items
@@ -148,9 +150,16 @@ fun WordbookScreen(viewModel: MainViewModel) {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
-            FloatingActionButton(onClick = { showCreateDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "手动添加单词")
+            FloatingActionButton(
+                onClick = { showCreateDialog = true },
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 3.dp)
+            ) {
+                Icon(AppleIcons.Plus, contentDescription = "手动添加单词", modifier = Modifier.size(22.dp))
             }
         }
     ) { padding ->
@@ -158,76 +167,126 @@ fun WordbookScreen(viewModel: MainViewModel) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
-            Text(
-                text = "我的单词本 (${filteredEntries.size}/${allEntries.size})",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "支持有道 XML/TXT/CSV/DB 导入导出，及已下载词库直接学习",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(Modifier.height(10.dp))
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                OutlinedButton(
-                    onClick = { importLauncher.launch(arrayOf("*/*")) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("导入")
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "我的单词本",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "导入默认存入「我的单词本」，导出仅导出「我的单词本」",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                OutlinedButton(
-                    onClick = { showAdbGuide = true },
-                    modifier = Modifier.weight(1f)
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer
                 ) {
-                    Icon(Icons.Default.Build, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("ADB")
-                }
-                OutlinedButton(
-                    onClick = { exportLauncher.launch("my_wordbook_youdao.xml") },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("导出")
+                    Text(
+                        text = "${filteredEntries.size} / ${allEntries.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = { importLauncher.launch(arrayOf("*/*")) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(vertical = 10.dp)
+                ) {
+                    Icon(AppleIcons.SquareArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("导入", fontWeight = FontWeight.Medium)
+                }
+                OutlinedButton(
+                    onClick = { exportLauncher.launch("my_wordbook_youdao.xml") },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant),
+                    contentPadding = PaddingValues(vertical = 10.dp)
+                ) {
+                    Icon(AppleIcons.SquareArrowUp, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("导出", fontWeight = FontWeight.Medium)
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
 
             OutlinedTextField(
                 value = uiState.wordbookQuery,
                 onValueChange = { viewModel.updateWordbookFilter(query = it) },
                 modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary
+                ),
                 placeholder = { Text("搜索单词、释义或笔记...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                leadingIcon = {
+                    Icon(
+                        AppleIcons.MagnifyingGlass,
+                        contentDescription = null,
+                        modifier = Modifier.size(19.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                trailingIcon = {
+                    if (uiState.wordbookQuery.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.updateWordbookFilter(query = "") }) {
+                            Icon(AppleIcons.Xmark, contentDescription = "清空", modifier = Modifier.size(17.dp))
+                        }
+                    }
+                },
                 singleLine = true
             )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
 
             // Ordered group chips: 全部 -> 我的单词本 -> Downloaded vocab books -> Custom groups
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 orderedGroupChips.forEach { group ->
                     FilterChip(
                         selected = uiState.selectedGroup == group,
                         onClick = { viewModel.updateWordbookFilter(group = group) },
-                        label = { Text(group) }
+                        shape = RoundedCornerShape(20.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = uiState.selectedGroup == group,
+                            borderColor = MaterialTheme.colorScheme.outlineVariant,
+                            borderWidth = 0.6.dp
+                        ),
+                        label = { Text(group, style = MaterialTheme.typography.labelMedium) }
                     )
                 }
             }
@@ -248,28 +307,44 @@ fun WordbookScreen(viewModel: MainViewModel) {
                     FilterChip(
                         selected = uiState.wordbookSort == sort,
                         onClick = { viewModel.updateWordbookFilter(sort = sort) },
-                        label = { Text(label) }
+                        shape = RoundedCornerShape(20.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.primary,
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = uiState.wordbookSort == sort,
+                            borderColor = MaterialTheme.colorScheme.outlineVariant,
+                            borderWidth = 0.6.dp
+                        ),
+                        label = { Text(label, style = MaterialTheme.typography.labelSmall) }
                     )
                 }
             }
 
             Spacer(Modifier.height(8.dp))
 
-            // Action banner when viewing a downloaded vocabulary book that hasn't been fully imported to wordbook yet
+            // Action banner when viewing a downloaded vocabulary book
             if (selectedDownloadedBook != null && filteredEntries.size < selectedBookTotalCount) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Text(
-                            text = "已下载离线词库「${selectedDownloadedBook.wordbookLabel}」（共 $selectedBookTotalCount 词，已加入学习计划 ${filteredEntries.size} 词）",
+                            text = "已下载词库「${selectedDownloadedBook.wordbookLabel}」（共 $selectedBookTotalCount 词，已加入学习 ${filteredEntries.size} 词）",
                             style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(8.dp))
                         Button(
                             enabled = !uiState.isImportingBookToWordbook,
+                            shape = RoundedCornerShape(12.dp),
                             onClick = { viewModel.importDownloadedBookAsWordbook(selectedDownloadedBook) }
                         ) {
                             if (uiState.isImportingBookToWordbook) {
@@ -292,7 +367,8 @@ fun WordbookScreen(viewModel: MainViewModel) {
             if (filteredEntries.isNotEmpty()) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(bottom = 80.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(filteredEntries, key = { it.id }) { entry ->
                         WordbookItemCard(
@@ -306,7 +382,8 @@ fun WordbookScreen(viewModel: MainViewModel) {
             } else if (selectedDownloadedBook != null && filteredPreviewEntries.isNotEmpty()) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(bottom = 80.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(filteredPreviewEntries, key = { "preview_${it.id}" }) { dictEntry ->
                         BookPreviewCard(
@@ -317,12 +394,22 @@ fun WordbookScreen(viewModel: MainViewModel) {
                     }
                 }
             } else {
-                Text(
-                    text = "当前分组暂无词汇。可在「查词」页收藏，点上方「导入」导入有道 XML，或在「词库」页下载专八/TOEFL/GRE/考研/四六级/雅思/商务英语后直接在此学习。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 16.dp)
-                )
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    Text(
+                        text = "当前分组暂无词汇。可在「查词」页收藏，点上方「导入」导入有道 XML/TXT/CSV 到「我的单词本」，或在「词库」页下载专八/TOEFL/GRE/考研/四六级/雅思/商务英语后直接在此学习。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(18.dp)
+                    )
+                }
             }
         }
     }
@@ -330,13 +417,14 @@ fun WordbookScreen(viewModel: MainViewModel) {
     deletingEntry?.let { target ->
         AlertDialog(
             onDismissRequest = { deletingEntry = null },
-            title = { Text("确认删除单词") },
+            shape = RoundedCornerShape(20.dp),
+            title = { Text("确认删除单词", fontWeight = FontWeight.SemiBold) },
             text = { Text("确定要从单词本删除「${target.word}」吗？该词的复习记录也将不再保留。") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteWordbookEntry(target.id)
                     deletingEntry = null
-                }) { Text("删除") }
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { deletingEntry = null }) { Text("取消") }
@@ -358,26 +446,6 @@ fun WordbookScreen(viewModel: MainViewModel) {
             }
         )
     }
-
-    if (showAdbGuide) {
-        AlertDialog(
-            onDismissRequest = { showAdbGuide = false },
-            title = { Text("无 Root 手机 ADB 导入有道单词本") },
-            text = {
-                Text(
-                    text = "未 Root 手机禁止第三方 App 直接读取有道私有目录。你可以用电脑执行源码 tools/ 目录下的 ADB 辅助脚本一键推送并自动导入：\n\n" +
-                        "1. 在电脑版网易有道词典导出「我的单词本」为 XML / TXT / CSV（或准备提取的 .db 文件，若含 -wal/-shm 请一并复制）；\n" +
-                        "2. 手机开启 USB 调试并连接电脑；\n" +
-                        "3. 运行命令：\n" +
-                        "python3 tools/adb_import_youdao.py --file youdao.xml\n\n" +
-                        "也可运行 --scan-phone 自动扫描手机公共目录（/sdcard/Youdao、/sdcard/Download）中已导出的文件并自动唤起本 App 完成导入。"
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { showAdbGuide = false }) { Text("知道了") }
-            }
-        )
-    }
 }
 
 @Composable
@@ -386,14 +454,20 @@ private fun BookPreviewCard(
     onSpeak: (String) -> Unit,
     onAddSingle: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = entry.word,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.SemiBold
                     )
                     if (entry.phonetic.isNotBlank()) {
                         Text(
@@ -404,17 +478,28 @@ private fun BookPreviewCard(
                     }
                 }
                 IconButton(onClick = { onSpeak(entry.word) }) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "离线发音")
+                    Icon(
+                        AppleIcons.SpeakerWave,
+                        contentDescription = "离线发音",
+                        modifier = Modifier.size(19.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                 }
                 IconButton(onClick = onAddSingle) {
-                    Icon(Icons.Default.Add, contentDescription = "单独加入我的单词本")
+                    Icon(
+                        AppleIcons.Plus,
+                        contentDescription = "单独加入我的单词本",
+                        modifier = Modifier.size(19.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             if (entry.translation.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
                 Text(text = entry.translation, style = MaterialTheme.typography.bodyMedium)
             }
             if (entry.example.isNotBlank()) {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
@@ -431,7 +516,12 @@ private fun BookPreviewCard(
                         }
                     }
                     IconButton(onClick = { onSpeak(entry.example) }) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "朗读例句", modifier = Modifier.size(16.dp))
+                        Icon(
+                            AppleIcons.SpeakerWave,
+                            contentDescription = "朗读例句",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -446,38 +536,61 @@ private fun WordbookItemCard(
     onEdit: () -> Unit,
     onRequestDelete: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = entry.word,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.SemiBold
                     )
-                    if (entry.phonetic.isNotBlank()) {
-                        Text(
-                            text = "/${entry.phonetic}/ · ${entry.groupName}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    Text(
+                        text = buildString {
+                            if (entry.phonetic.isNotBlank()) append("/${entry.phonetic}/ · ")
+                            append(entry.groupName)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
                 IconButton(onClick = { onSpeak(entry.word) }) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "离线发音")
+                    Icon(
+                        AppleIcons.SpeakerWave,
+                        contentDescription = "离线发音",
+                        modifier = Modifier.size(19.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                 }
                 IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "编辑")
+                    Icon(
+                        AppleIcons.Pencil,
+                        contentDescription = "编辑",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 IconButton(onClick = onRequestDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "删除")
+                    Icon(
+                        AppleIcons.Trash,
+                        contentDescription = "删除",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
+                    )
                 }
             }
             if (entry.translation.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
                 Text(text = entry.translation, style = MaterialTheme.typography.bodyMedium)
             }
             if (entry.exampleSentence.isNotBlank()) {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
@@ -494,28 +607,39 @@ private fun WordbookItemCard(
                         }
                     }
                     IconButton(onClick = { onSpeak(entry.exampleSentence) }) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "朗读例句", modifier = Modifier.size(16.dp))
+                        Icon(
+                            AppleIcons.SpeakerWave,
+                            contentDescription = "朗读例句",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
             if (entry.note.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
                 Text(
                     text = "笔记：${entry.note}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "熟练度 Lv.${entry.masteryLevel}/5",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(10.dp))
                 LinearProgressIndicator(
                     progress = { (entry.masteryLevel / 5f).coerceIn(0f, 1f) },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    color = MaterialTheme.colorScheme.tertiary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             }
         }
@@ -537,15 +661,16 @@ private fun WordbookEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initial == null) "添加单词" else "编辑单词") },
+        shape = RoundedCornerShape(20.dp),
+        title = { Text(if (initial == null) "添加单词" else "编辑单词", fontWeight = FontWeight.SemiBold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = word, onValueChange = { word = it }, label = { Text("单词") }, singleLine = true)
-                OutlinedTextField(value = phonetic, onValueChange = { phonetic = it }, label = { Text("音标") }, singleLine = true)
-                OutlinedTextField(value = translation, onValueChange = { translation = it }, label = { Text("释义") }, maxLines = 3)
-                OutlinedTextField(value = example, onValueChange = { example = it }, label = { Text("英文例句") }, maxLines = 2)
-                OutlinedTextField(value = group, onValueChange = { group = it }, label = { Text("分组") }, singleLine = true)
-                OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("学习笔记") }, maxLines = 2)
+                OutlinedTextField(value = word, onValueChange = { word = it }, label = { Text("单词") }, singleLine = true, shape = RoundedCornerShape(12.dp))
+                OutlinedTextField(value = phonetic, onValueChange = { phonetic = it }, label = { Text("音标") }, singleLine = true, shape = RoundedCornerShape(12.dp))
+                OutlinedTextField(value = translation, onValueChange = { translation = it }, label = { Text("释义") }, maxLines = 3, shape = RoundedCornerShape(12.dp))
+                OutlinedTextField(value = example, onValueChange = { example = it }, label = { Text("英文例句") }, maxLines = 2, shape = RoundedCornerShape(12.dp))
+                OutlinedTextField(value = group, onValueChange = { group = it }, label = { Text("分组") }, singleLine = true, shape = RoundedCornerShape(12.dp))
+                OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("学习笔记") }, maxLines = 2, shape = RoundedCornerShape(12.dp))
             }
         },
         confirmButton = {

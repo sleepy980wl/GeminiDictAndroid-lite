@@ -233,10 +233,7 @@ object YoudaoImportParser {
         nowMillis: Long = System.currentTimeMillis()
     ): List<WordbookEntryEntity> {
         return parsed.map { item ->
-            val group = item.tags.split(",", ";", " ")
-                .firstOrNull { it.isNotBlank() }
-                ?.trim()
-                ?: "我的单词本"
+            val group = "我的单词本"
             val intervalDays = when (item.progress) {
                 0 -> 0
                 1 -> 1

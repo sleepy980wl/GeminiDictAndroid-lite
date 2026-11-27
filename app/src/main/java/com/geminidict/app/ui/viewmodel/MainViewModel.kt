@@ -684,12 +684,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun exportWordbookToUri(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val all = db.wordbookDao().getAllSnapshot()
-                val xml = YoudaoImportParser.exportToYoudaoXml(all)
+                val myWords = db.wordbookDao().getByGroupSnapshot("我的单词本")
+                val xml = YoudaoImportParser.exportToYoudaoXml(myWords)
                 app.contentResolver.openOutputStream(uri)?.use { out ->
                     out.write(xml.toByteArray(StandardCharsets.UTF_8))
                 }
-                _uiState.value = _uiState.value.copy(statusBanner = "已导出 ${all.size} 个单词为有道 XML 格式。")
+                _uiState.value = _uiState.value.copy(statusBanner = "已导出「我的单词本」共 ${myWords.size} 个单词为 XML 格式。")
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(statusBanner = "导出失败: ${e.message}")
             }

@@ -168,6 +168,9 @@ interface WordbookDao {
     @Query("SELECT * FROM wordbook_entries ORDER BY createdAt DESC")
     suspend fun getAllSnapshot(): List<WordbookEntryEntity>
 
+    @Query("SELECT * FROM wordbook_entries WHERE groupName = :groupName ORDER BY createdAt DESC")
+    suspend fun getByGroupSnapshot(groupName: String): List<WordbookEntryEntity>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllIgnore(entries: List<WordbookEntryEntity>): List<Long>
 
