@@ -90,7 +90,7 @@ android {
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
-# APK is built directly as GeminiDict.apk (no post-build copy/rename in CI).
+// APK is built directly as GeminiDict.apk (no post-build copy/rename in CI).
 androidComponents {
     onVariants { variant ->
         variant.outputs.forEach { output ->
