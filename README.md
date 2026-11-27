@@ -22,4 +22,4 @@
 
 ## 编译与构建
 - **Android Studio**：解压后打开 `GeminiDictAndroid`，构建时自动拉取 `sherpa-onnx-1.12.31.aar`。
-- **GitHub Actions**：推送至 GitHub 即可自动拉取 AAR、运行全部 JUnit 单元测试并生成 `GeminiDict-debug-apk`。
+- **GitHub Actions**：推送至 GitHub 即可自动拉取 AAR、运行全部 JUnit 单元测试并生成 `GeminiDict.apk`。

@@ -62,11 +62,6 @@ jobs:
           if-no-files-found: error
 
 
-      - name: Rename APK to GeminiDict.apk
-        if: github.event_name != 'pull_request'
-        run: |
-          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/GeminiDict.apk
-          ls -l app/build/outputs/apk/debug/GeminiDict.apk
 
       # Push builds only (not pull requests): publish the APK as a GitHub
       # Release and delete every older release, so only the latest one stays.
@@ -85,6 +80,7 @@ jobs:
           set -e
           TAG="v${{ steps.version.outputs.version }}-${{ github.run_number }}"
           APK=app/build/outputs/apk/debug/GeminiDict.apk
+          ls -l "$APK"
           gh release create "$TAG" "$APK" \
             --title "GeminiDictAndroid v${{ steps.version.outputs.version }} (build ${{ github.run_number }})" \
             --notes "自动构建：单元测试通过后的 Debug APK（GeminiDict.apk）。安装后在设置页填写 Gemini API Key 即可使用 AI 翻译；不填 Key 也可完整离线使用。"
