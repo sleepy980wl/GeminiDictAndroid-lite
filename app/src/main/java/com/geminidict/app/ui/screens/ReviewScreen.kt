@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -243,8 +244,9 @@ fun ReviewScreen(viewModel: MainViewModel) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.Center,
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.Top,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Row(
@@ -270,7 +272,7 @@ fun ReviewScreen(viewModel: MainViewModel) {
                         }
                     }
                 }
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(10.dp))
 
                 if (!spellingMode) {
                     Text(
@@ -279,33 +281,31 @@ fun ReviewScreen(viewModel: MainViewModel) {
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center
                     )
-                    if (currentCard.phonetic.isNotBlank()) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = "/${currentCard.phonetic}/",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Spacer(Modifier.height(14.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        FilledTonalButton(
-                            onClick = { viewModel.speakEnglish(currentCard.word, "en-US") },
-                            shape = RoundedCornerShape(20.dp),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Icon(AppleIcons.SpeakerWave, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(5.dp))
-                            Text("美音")
+                    Spacer(Modifier.height(4.dp))
+                    // One small replay button (uses the accent chosen in
+                    // Settings); the separate 美音/英音 buttons are gone so
+                    // more of the answer fits on screen.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        if (currentCard.phonetic.isNotBlank()) {
+                            Text(
+                                text = "/${currentCard.phonetic}/",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
-                        FilledTonalButton(
-                            onClick = { viewModel.speakEnglish(currentCard.word, "en-GB") },
-                            shape = RoundedCornerShape(20.dp),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        IconButton(
+                            onClick = { viewModel.speakEnglish(currentCard.word) },
+                            modifier = Modifier.size(30.dp)
                         ) {
-                            Icon(AppleIcons.SpeakerWave, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(5.dp))
-                            Text("英音")
+                            Icon(
+                                AppleIcons.SpeakerWave,
+                                contentDescription = "重读单词",
+                                modifier = Modifier.size(17.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 } else {
@@ -347,18 +347,18 @@ fun ReviewScreen(viewModel: MainViewModel) {
                     }
                 }
 
-                Spacer(Modifier.height(22.dp))
+                Spacer(Modifier.height(12.dp))
 
                 if (uiState.isCardFlipped) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(10.dp))
                     Text(
                         text = currentCard.translation.ifBlank { "(暂无中文释义)" },
                         style = MaterialTheme.typography.titleMedium,
                         textAlign = TextAlign.Center
                     )
                     if (reviewExample != null) {
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(

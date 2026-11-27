@@ -407,6 +407,13 @@ private fun OfflineDictCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        if (!hit.exampleSourceLabel.isNullOrBlank()) {
+                            Text(
+                                text = "例句来自「${hit.exampleSourceLabel}」",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                     IconButton(onClick = { onSpeak(entry.example, null) }) {
                         Icon(

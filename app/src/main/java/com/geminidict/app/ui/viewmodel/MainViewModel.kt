@@ -49,7 +49,9 @@ enum class WordbookSort {
 
 data class DictSearchHit(
     val entry: DictionaryEntryEntity,
-    val matchHint: String? = null
+    val matchHint: String? = null,
+    /** Short name of the dictionary the displayed example sentence came from. */
+    val exampleSourceLabel: String? = null
 )
 
 data class MainUiState(
@@ -220,7 +222,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val existing = mergedMap[item.wordLower]
                 if (existing == null) {
                     if (mergedMap.size < maxTotal) {
-                        mergedMap[item.wordLower] = DictSearchHit(item, hint)
+                        mergedMap[item.wordLower] = DictSearchHit(
+                            item,
+                            hint,
+                            exampleSourceLabel = if (item.example.isNotBlank()) {
+                                exampleSourceLabel(item.sourceId)
+                            } else {
+                                null
+                            }
+                        )
                     }
                 } else {
                     val cur = existing.entry
@@ -234,11 +244,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 definition = if (fillDef) item.definition else cur.definition,
                                 example = if (fillEx) item.example else cur.example,
                                 exampleTranslation = if (fillEx) item.exampleTranslation else cur.exampleTranslation
-                            )
+                            ),
+                            exampleSourceLabel = if (fillEx) {
+                                exampleSourceLabel(item.sourceId)
+                            } else {
+                                existing.exampleSourceLabel
+                            }
                         )
                     }
                 }
             }
+        }
+
+        /** Short display name (e.g. 专八) of the dictionary an example came from. */
+        fun exampleSourceLabel(sourceId: String): String? {
+            val item = DictionaryCatalog.items.firstOrNull { it.id == sourceId }
+                ?: return null
+            return item.wordbookLabel ?: item.name
         }
 
         val prefixHits = db.dictionaryDao().searchPrefixIndexed(
