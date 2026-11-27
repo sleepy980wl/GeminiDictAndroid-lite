@@ -210,6 +210,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Short display name (e.g. 专八) of the dictionary an example came from. */
+    private fun exampleSourceLabel(sourceId: String): String? {
+        val item = DictionaryCatalog.items.firstOrNull { it.id == sourceId }
+            ?: return null
+        return item.wordbookLabel ?: item.name
+    }
+
     private suspend fun searchEnglishChineseFast(
         trimmed: String,
         lower: String,
@@ -254,13 +261,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             }
-        }
-
-        /** Short display name (e.g. 专八) of the dictionary an example came from. */
-        fun exampleSourceLabel(sourceId: String): String? {
-            val item = DictionaryCatalog.items.firstOrNull { it.id == sourceId }
-                ?: return null
-            return item.wordbookLabel ?: item.name
         }
 
         val prefixHits = db.dictionaryDao().searchPrefixIndexed(
