@@ -29,7 +29,7 @@ import com.geminidict.app.data.local.entity.WordbookEntryEntity
         ReviewLogEntity::class,
         DownloadedDictEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -90,7 +90,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Wordbook uniqueness becomes (wordLower, source): the same
+                // spelling can be a different word in another language
+                // (French "chat" vs English "chat"), so both must coexist.
+                // Existing data has no wordLower duplicates (the old index
+                // enforced that), so the new index builds cleanly.
+                db.execSQL("DROP INDEX IF EXISTS `index_wordbook_entries_wordLower`")
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_wordbook_entries_wordLower_source` " +
+                        "ON `wordbook_entries` (`wordLower`, `source`)"
+                )
+            }
+        }
+
+        val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {

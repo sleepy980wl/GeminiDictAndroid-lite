@@ -54,6 +54,9 @@ data class DictSearchHit(
     val exampleSourceLabel: String? = null
 )
 
+/** Dictionary sourceIds whose entries are French (word or translation). */
+val FRENCH_DICT_SOURCE_IDS = setOf("french_zh", "cfdict")
+
 data class MainUiState(
     val query: String = "",
     val translateSubTab: Int = 0, // 0=中英/英英词典, 1=新华字典
@@ -404,11 +407,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun speakFrench(text: String, rateOverride: Float? = null) {
+        val error = ttsManager.speakFrench(text, rateOverride)
+        if (!error.isNullOrBlank()) {
+            _uiState.value = _uiState.value.copy(statusBanner = error)
+        }
+    }
+
+    fun isFrenchDictEntry(entry: DictionaryEntryEntity): Boolean =
+        entry.sourceId in FRENCH_DICT_SOURCE_IDS
+
+    fun isFrenchWordbookEntry(entry: WordbookEntryEntity): Boolean =
+        entry.source in FRENCH_DICT_SOURCE_IDS
+
+    /**
+     * Reads a review card's word aloud in the right language. French-dictionary
+     * words are read in French; Han-French (CFDICT) entries show a Chinese word,
+     * so the French translation is read instead (this app has no Chinese TTS);
+     * everything else is read in English with the accent chosen in Settings.
+     */
+    fun speakReviewWord(entry: WordbookEntryEntity) {
+        when (entry.source) {
+            "french_zh" -> speakFrench(entry.word)
+            "cfdict" -> speakFrench(entry.translation.ifBlank { entry.word })
+            else -> speakEnglish(entry.word)
+        }
+    }
+
+    /** Reads a review card's example sentence aloud (French for French entries). */
+    fun speakReviewExample(entry: WordbookEntryEntity, sentence: String) {
+        if (entry.source == "french_zh") speakFrench(sentence) else speakEnglish(sentence)
+    }
+
     // --- Wordbook Operations & Study Downloaded Vocabulary Books ---
 
     fun toggleBookmarkFromDict(entry: DictionaryEntryEntity) {
         viewModelScope.launch(Dispatchers.IO) {
-            val existing = db.wordbookDao().findByWordLower(entry.wordLower)
+            // Scoped by source: the same spelling can be a different word in
+            // another language (French "chat" vs English "chat").
+            val existing = db.wordbookDao().findByWordLowerAndSource(entry.wordLower, entry.sourceId)
             if (existing != null) {
                 db.wordbookDao().deleteById(existing.id)
                 _uiState.value = _uiState.value.copy(statusBanner = "已从单词本移除「${entry.word}」")
@@ -424,7 +461,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         exampleTranslation = entry.exampleTranslation,
                         tags = entry.tag,
                         groupName = "我的单词本",
-                        source = "offline_dict"
+                        source = entry.sourceId
                     )
                 )
                 _uiState.value = _uiState.value.copy(statusBanner = "已收藏「${entry.word}」到我的单词本")

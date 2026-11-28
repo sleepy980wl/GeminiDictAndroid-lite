@@ -43,6 +43,7 @@ import com.geminidict.app.data.local.entity.ChineseDictEntryEntity
 import com.geminidict.app.data.remote.GeminiTranslationResult
 import com.geminidict.app.ui.icons.AppleIcons
 import com.geminidict.app.ui.viewmodel.DictSearchHit
+import com.geminidict.app.ui.viewmodel.FRENCH_DICT_SOURCE_IDS
 import com.geminidict.app.ui.viewmodel.MainViewModel
 import java.util.Locale
 
@@ -51,7 +52,7 @@ fun TranslateScreen(viewModel: MainViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val wordbook by viewModel.wordbookEntries.collectAsStateWithLifecycle()
     val totalDictCount by viewModel.totalDictCount.collectAsStateWithLifecycle()
-    val bookmarkedSet = remember(wordbook) { wordbook.map { it.wordLower }.toSet() }
+    val bookmarkedSet = remember(wordbook) { wordbook.map { it.wordLower to it.source }.toSet() }
 
     Column(
         modifier = Modifier
@@ -225,8 +226,9 @@ fun TranslateScreen(viewModel: MainViewModel) {
                 items(uiState.offlineResults, key = { "en_${it.entry.id}_${it.entry.wordLower}" }) { hit ->
                     OfflineDictCard(
                         hit = hit,
-                        isBookmarked = hit.entry.wordLower in bookmarkedSet,
+                        isBookmarked = (hit.entry.wordLower to hit.entry.sourceId) in bookmarkedSet,
                         onSpeak = { text, accent -> viewModel.speakEnglish(text, accent) },
+                        onSpeakFrench = { text -> viewModel.speakFrench(text) },
                         onToggleBookmark = { viewModel.toggleBookmarkFromDict(hit.entry) }
                     )
                 }
@@ -322,9 +324,12 @@ private fun OfflineDictCard(
     hit: DictSearchHit,
     isBookmarked: Boolean,
     onSpeak: (String, String?) -> Unit,
+    onSpeakFrench: (String) -> Unit,
     onToggleBookmark: () -> Unit
 ) {
     val entry = hit.entry
+    // French entries (word or translation) are read with the French voice.
+    val isFrench = entry.sourceId in FRENCH_DICT_SOURCE_IDS
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -359,7 +364,15 @@ private fun OfflineDictCard(
                         )
                     }
                 }
-                IconButton(onClick = { onSpeak(entry.word, "en-US") }) {
+                IconButton(onClick = {
+                    if (isFrench) {
+                        // French word, or the French translation for a
+                        // Han-French entry (whose word is Chinese).
+                        onSpeakFrench(if (entry.sourceId == "cfdict") entry.translation else entry.word)
+                    } else {
+                        onSpeak(entry.word, "en-US")
+                    }
+                }) {
                     Icon(
                         AppleIcons.SpeakerWave,
                         contentDescription = "离线发音",
@@ -415,7 +428,9 @@ private fun OfflineDictCard(
                             )
                         }
                     }
-                    IconButton(onClick = { onSpeak(entry.example, null) }) {
+                    IconButton(onClick = {
+                        if (isFrench) onSpeakFrench(entry.example) else onSpeak(entry.example, null)
+                    }) {
                         Icon(
                             AppleIcons.SpeakerWave,
                             contentDescription = "离线朗读例句",
@@ -427,7 +442,7 @@ private fun OfflineDictCard(
             } else if (entry.sourceId != "cc_cedict") {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "注：该词条暂无离线例句，可在「词库」下载「英汉·例句」词库，或点击上方「Gemini AI 深度翻译」生成双语例句。",
+                    text = "注：该词条暂无离线例句，可在「词库」下载带双语例句的词库，或点击上方「Gemini AI 深度翻译」生成双语例句。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

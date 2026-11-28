@@ -170,6 +170,9 @@ interface WordbookDao {
     @Query("SELECT * FROM wordbook_entries WHERE wordLower = :wordLower LIMIT 1")
     suspend fun findByWordLower(wordLower: String): WordbookEntryEntity?
 
+    @Query("SELECT * FROM wordbook_entries WHERE wordLower = :wordLower AND source = :source LIMIT 1")
+    suspend fun findByWordLowerAndSource(wordLower: String, source: String): WordbookEntryEntity?
+
     @Query("SELECT * FROM wordbook_entries WHERE nextReviewAt <= :nowMillis ORDER BY nextReviewAt ASC LIMIT :limit")
     suspend fun getDueForReview(nowMillis: Long, limit: Int = 50): List<WordbookEntryEntity>
 

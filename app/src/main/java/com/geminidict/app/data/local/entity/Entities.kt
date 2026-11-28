@@ -86,7 +86,10 @@ data class ChineseDictFtsEntity(
 @Entity(
     tableName = "wordbook_entries",
     indices = [
-        Index(value = ["wordLower"], unique = true),
+        // (wordLower, source): the same spelling can be a different word in
+        // another language (e.g. French "chat" = cat vs English "chat"), so
+        // uniqueness must be per source, not per spelling alone.
+        Index(value = ["wordLower", "source"], unique = true),
         Index(value = ["groupName"]),
         Index(value = ["nextReviewAt"])
     ]

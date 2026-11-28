@@ -279,7 +279,9 @@ class DictionaryDownloader(
             DictFormat.ECDICT_CSV_ZIP,
             DictFormat.WEBSTERS_JSON,
             DictFormat.CC_CEDICT_GZ,
-            DictFormat.KAJWEB_JSONL_ZIP -> {
+            DictFormat.KAJWEB_JSONL_ZIP,
+            DictFormat.FRENCH_JSONL_ZIP,
+            DictFormat.CFDICT_TEXT -> {
                 bulkImportDictionaryEntries(sourceId, displayName, categoryLabel, onStatus) { insertBatch ->
                     FileInputStream(file).use { fis ->
                         when (format) {
@@ -293,6 +295,10 @@ class DictionaryDownloader(
                                 DictionaryParsers.parseCedictStream(fis, isGzip = true, sourceId = sourceId) { insertBatch(it) }
                             DictFormat.KAJWEB_JSONL_ZIP ->
                                 DictionaryParsers.parseKajwebJsonlZipStream(fis, sourceId = sourceId) { insertBatch(it) }
+                            DictFormat.FRENCH_JSONL_ZIP ->
+                                DictionaryParsers.parseFrenchJsonlZipStream(fis, sourceId = sourceId) { insertBatch(it) }
+                            DictFormat.CFDICT_TEXT ->
+                                DictionaryParsers.parseCfdictStream(fis, sourceId = sourceId) { insertBatch(it) }
                             else -> 0
                         }
                     }

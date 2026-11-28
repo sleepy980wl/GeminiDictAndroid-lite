@@ -6,6 +6,8 @@ enum class DictFormat {
     WEBSTERS_JSON,
     CC_CEDICT_GZ,
     KAJWEB_JSONL_ZIP,
+    FRENCH_JSONL_ZIP,
+    CFDICT_TEXT,
     XINHUA_WORD_JSON,
     XINHUA_IDIOM_JSON,
     XINHUA_CI_JSON,
@@ -201,7 +203,36 @@ object DictionaryCatalog {
             wordbookLabel = "商务英语"
         ),
 
-        // --- 4. 汉英开源词典 ---
+        // --- 4. 法汉 / 汉法离线词典（适合中国人初学法语，带双语例句） ---
+        DictionaryCatalogItem(
+            id = "french_zh",
+            name = "法汉词典（初学法语·带双语例句）",
+            categoryLabel = "法汉·例句",
+            description = "适合中国人初学法语的法汉词典：2.4 万法语词头配中文释义，高频词附带 Tatoeba 真实法-中双语例句（全库约 21% 词条有例句），下载后可直接在「单词本」按遗忘曲线学习全部词汇。",
+            approxSize = "~0.5 MB",
+            approxSizeMb = 1,
+            approxEntries = "23,589 词条",
+            license = "CC BY-SA (WikDict) + CC BY 2.0 FR (Tatoeba)",
+            downloadUrl = "https://raw.githubusercontent.com/sleepy980wl/GeminiDictAndroid-lite/main/dictionaries/french_zh.jsonl.zip",
+            isGithubRaw = true,
+            format = DictFormat.FRENCH_JSONL_ZIP,
+            wordbookLabel = "法语"
+        ),
+        DictionaryCatalogItem(
+            id = "cfdict",
+            name = "汉法词典 CFDICT（中文查法语）",
+            categoryLabel = "汉法",
+            description = "5.6 万条中文词头查法语释义，带拼音，适合由中文反查法语说法，与法汉词典配合实现中法双向离线查词。",
+            approxSize = "~3.5 MB",
+            approxSizeMb = 4,
+            approxEntries = "56,300 词条",
+            license = "CC BY-SA 3.0 (CxDICT/CFDICT)",
+            downloadUrl = "https://raw.githubusercontent.com/licryle/CxDICT/main/dictionaries/fr/data/cfdict.u8",
+            isGithubRaw = true,
+            format = DictFormat.CFDICT_TEXT
+        ),
+
+        // --- 5. 汉英开源词典 ---
         DictionaryCatalogItem(
             id = "cc_cedict",
             name = "CC-CEDICT 汉英大词典",
@@ -216,7 +247,7 @@ object DictionaryCatalog {
             format = DictFormat.CC_CEDICT_GZ
         ),
 
-        // --- 5. 中文新华字典系列 ---
+        // --- 6. 中文新华字典系列 ---
         DictionaryCatalogItem(
             id = "xinhua_word",
             name = "中华新华字典 · 汉字库",

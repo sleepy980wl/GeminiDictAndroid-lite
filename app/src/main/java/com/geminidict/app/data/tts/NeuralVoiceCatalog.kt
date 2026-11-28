@@ -3,7 +3,7 @@ package com.geminidict.app.data.tts
 data class NeuralVoiceModelItem(
     val id: String,
     val name: String,
-    val accent: String, // "en-US" or "en-GB"
+    val accent: String, // "en-US", "en-GB" or "fr-FR"
     val description: String,
     val approxSize: String,
     val approxSizeMb: Int,
@@ -14,9 +14,30 @@ data class NeuralVoiceModelItem(
 /**
  * Verified Piper VITS English neural TTS models from k2-fsa/sherpa-onnx releases.
  * Each archive bundles model.onnx, tokens.txt, and espeak-ng-data/ for 100% offline synthesis.
+ * French voices use the same VITS mechanism (espeak-ng-data covers French phonemes).
  */
 object NeuralVoiceCatalog {
     val items: List<NeuralVoiceModelItem> = listOf(
+        NeuralVoiceModelItem(
+            id = "vits_piper_fr_fr_siwis_medium",
+            name = "法语女声 · Siwis（标准法语推荐）",
+            accent = "fr-FR",
+            description = "高自然度标准法语女声（SIWIS 语料，22kHz），单词与长例句均接近真人朗读。",
+            approxSize = "~64 MB",
+            approxSizeMb = 64,
+            onnxFileName = "fr_FR-siwis-medium.onnx",
+            downloadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-fr_FR-siwis-medium.tar.bz2"
+        ),
+        NeuralVoiceModelItem(
+            id = "vits_piper_fr_fr_tom_medium",
+            name = "法语男声 · Tom（标准法语）",
+            accent = "fr-FR",
+            description = "自然沉稳的标准法语男声，适合法语单词与长句离线朗读。",
+            approxSize = "~64 MB",
+            approxSizeMb = 64,
+            onnxFileName = "fr_FR-tom-medium.onnx",
+            downloadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-fr_FR-tom-medium.tar.bz2"
+        ),
         NeuralVoiceModelItem(
             id = "vits_piper_en_gb_cori_medium",
             name = "英式女声 · Cori（标准英音推荐）",

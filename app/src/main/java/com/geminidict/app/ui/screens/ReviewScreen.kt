@@ -86,7 +86,7 @@ fun ReviewScreen(viewModel: MainViewModel) {
     LaunchedEffect(currentCardId) {
         viewModel.clearReviewExample()
         val card = currentCard
-        if (card != null) viewModel.speakEnglish(card.word)
+        if (card != null) viewModel.speakReviewWord(card)
     }
     LaunchedEffect(isCardFlipped) {
         if (isCardFlipped) {
@@ -98,8 +98,9 @@ fun ReviewScreen(viewModel: MainViewModel) {
     }
     LaunchedEffect(reviewExample) {
         val example = reviewExample
-        if (isCardFlipped && example != null) {
-            viewModel.speakEnglish(example.sentence)
+        val card = currentCard
+        if (isCardFlipped && example != null && card != null) {
+            viewModel.speakReviewExample(card, example.sentence)
         }
     }
 
@@ -297,7 +298,7 @@ fun ReviewScreen(viewModel: MainViewModel) {
                             )
                         }
                         IconButton(
-                            onClick = { viewModel.speakEnglish(currentCard.word) },
+                            onClick = { viewModel.speakReviewWord(currentCard) },
                             modifier = Modifier.size(30.dp)
                         ) {
                             Icon(
@@ -316,7 +317,7 @@ fun ReviewScreen(viewModel: MainViewModel) {
                     )
                     Spacer(Modifier.height(12.dp))
                     FilledTonalButton(
-                        onClick = { viewModel.speakEnglish(currentCard.word) },
+                        onClick = { viewModel.speakReviewWord(currentCard) },
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Icon(AppleIcons.SpeakerWave, contentDescription = null, modifier = Modifier.size(17.dp))
@@ -374,7 +375,7 @@ fun ReviewScreen(viewModel: MainViewModel) {
                                     )
                                 }
                             }
-                            IconButton(onClick = { viewModel.speakEnglish(reviewExample!!.sentence) }) {
+                            IconButton(onClick = { viewModel.speakReviewExample(currentCard, reviewExample!!.sentence) }) {
                                 Icon(
                                     AppleIcons.SpeakerWave,
                                     contentDescription = "朗读例句",

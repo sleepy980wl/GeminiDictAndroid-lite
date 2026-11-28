@@ -399,6 +399,131 @@ object DictionaryParsers {
 
     private val cedictRegex = Regex("""^(\S+)\s+(\S+)\s+\[([^\]]+)\]\s+/(.+)/\s*$""")
 
+    suspend fun parseFrenchJsonlZipStream(
+        inputStream: InputStream,
+        sourceId: String,
+        batchSize: Int = 1000,
+        onBatch: suspend (List<DictionaryEntryEntity>) -> Unit
+    ): Int {
+        var total = 0
+        val batch = ArrayList<DictionaryEntryEntity>(batchSize)
+        ZipInputStream(inputStream).use { zis ->
+            while (true) {
+                val entry = zis.nextEntry ?: break
+                if (!entry.isDirectory && (entry.name.endsWith(".jsonl", ignoreCase = true) || entry.name.endsWith(".json", ignoreCase = true))) {
+                    val reader = BufferedReader(InputStreamReader(zis, StandardCharsets.UTF_8), 64 * 1024)
+                    while (true) {
+                        val line = reader.readLine() ?: break
+                        val parsed = parseFrenchJsonLine(line, sourceId) ?: continue
+                        batch.add(parsed)
+                        if (batch.size >= batchSize) {
+                            onBatch(batch.toList())
+                            total += batch.size
+                            batch.clear()
+                        }
+                    }
+                }
+                zis.closeEntry()
+            }
+        }
+        if (batch.isNotEmpty()) {
+            onBatch(batch.toList())
+            total += batch.size
+            batch.clear()
+        }
+        return total
+    }
+
+    /**
+     * One line of the merged French-Chinese dictionary JSONL:
+     * {"word": "bonjour", "translation": "你好；早上好", "example": "« Bonjour », dit Tom.",
+     *  "exampleTranslation": "“你好”，汤姆说。"}
+     * Built once from WikDict fr-zh (translations) + Tatoeba fra-cmn sentence pairs (examples),
+     * Chinese text normalized to Simplified.
+     */
+    fun parseFrenchJsonLine(line: String, sourceId: String): DictionaryEntryEntity? {
+        val trimmed = line.trim()
+        if (trimmed.isEmpty() || !trimmed.startsWith("{")) return null
+        return try {
+            val root = gson.fromJson(trimmed, JsonObject::class.java) ?: return null
+            val word = root.get("word")?.takeIf { it.isJsonPrimitive }?.asString?.trim().orEmpty()
+            if (word.isEmpty()) return null
+            // Skip WikDict gloss entries, not real headwords
+            // (e.g. "(de la bouche, ...)", "-isme").
+            if (word.startsWith("(") || word.startsWith("-") || word.contains("(")) return null
+            val translation = root.get("translation")?.takeIf { it.isJsonPrimitive }?.asString?.trim().orEmpty()
+            val example = root.get("example")?.takeIf { it.isJsonPrimitive }?.asString?.trim().orEmpty()
+            val exampleTranslation = root.get("exampleTranslation")?.takeIf { it.isJsonPrimitive }?.asString?.trim().orEmpty()
+            DictionaryEntryEntity(
+                word = word,
+                wordLower = word.lowercase(Locale.ROOT),
+                translation = translation,
+                example = example,
+                exampleTranslation = exampleTranslation,
+                tag = "fr-zh",
+                sourceId = sourceId
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * CFDICT (CxDICT) 汉法词典: one line per Chinese headword,
+     * `傳統 简体 [pinyin] /法语译义1/法语译义2/`. The simplified form is the
+     * lookup word; the French translations become the translation. Same line
+     * shape as CC-CEDICT, so the shared regex applies.
+     */
+    fun parseCfdictLine(line: String, sourceId: String): DictionaryEntryEntity? {
+        // One headword contains a full-width space (U+3000); normalize it first.
+        val trimmed = line.replace('\u3000', ' ').trim()
+        if (trimmed.isEmpty() || trimmed.startsWith("#")) return null
+        val match = cedictRegex.matchEntire(trimmed) ?: return null
+        val trad = match.groupValues[1]
+        val simp = match.groupValues[2]
+        val pinyin = match.groupValues[3]
+        val defs = match.groupValues[4].split("/").filter { it.isNotBlank() }.joinToString("；")
+        if (simp.isEmpty() || defs.isEmpty()) return null
+        val displayTrad = if (trad != simp) " (繁: $trad)" else ""
+        return DictionaryEntryEntity(
+            word = simp,
+            wordLower = simp.lowercase(Locale.ROOT),
+            phonetic = pinyin,
+            definition = defs,
+            translation = "$defs$displayTrad",
+            tag = "cfdict",
+            sourceId = sourceId
+        )
+    }
+
+    suspend fun parseCfdictStream(
+        inputStream: InputStream,
+        sourceId: String,
+        batchSize: Int = 2000,
+        onBatch: suspend (List<DictionaryEntryEntity>) -> Unit
+    ): Int {
+        var total = 0
+        val batch = ArrayList<DictionaryEntryEntity>(batchSize)
+        BufferedReader(InputStreamReader(inputStream, StandardCharsets.UTF_8), 64 * 1024).use { reader ->
+            while (true) {
+                val line = reader.readLine() ?: break
+                val entry = parseCfdictLine(line, sourceId) ?: continue
+                batch.add(entry)
+                if (batch.size >= batchSize) {
+                    onBatch(batch.toList())
+                    total += batch.size
+                    batch.clear()
+                }
+            }
+        }
+        if (batch.isNotEmpty()) {
+            onBatch(batch.toList())
+            total += batch.size
+            batch.clear()
+        }
+        return total
+    }
+
     fun parseCedictLine(line: String, sourceId: String): DictionaryEntryEntity? {
         val trimmed = line.trim()
         if (trimmed.isEmpty() || trimmed.startsWith("#")) return null

@@ -176,6 +176,134 @@ class OfflineTtsManager(
         return speakWithSystemFallback(cleaned, accentOverride, rateOverride)
     }
 
+    /**
+     * French equivalent of [speakEnglish]: prefers an installed French
+     * Sherpa-ONNX neural voice (accent "fr-FR"), falls back to Android
+     * system offline French TTS. Never falls back to an English neural
+     * voice: reading French with an English model is worse than no voice.
+     */
+    fun speakFrench(
+        text: String,
+        rateOverride: Float? = null
+    ): String? {
+        val cleaned = text.trim()
+        if (cleaned.isEmpty()) return null
+        val targetRate = (rateOverride ?: savedRate).coerceIn(0.5f, 1.5f)
+
+        // 1. Try an installed French Sherpa-ONNX neural voice first
+        if (preferNeuralVoice) {
+            val installed = voiceDownloader.getInstalledVoices()
+            val selectedVoice = pickBestFrenchNeuralVoice(installed)
+            if (selectedVoice != null) {
+                stop()
+                activeNeuralJob = scope.launch {
+                    try {
+                        _state.value = _state.value.copy(
+                            isSpeaking = true,
+                            usingNeuralVoice = true,
+                            activeVoiceName = "神经语音 · ${selectedVoice.item.name}",
+                            activeAccent = "fr-FR",
+                            fallbackNotice = null,
+                            errorMessage = null
+                        )
+                        neuralEngine.synthesizeAndPlay(selectedVoice, cleaned, targetRate)
+                    } catch (_: CancellationException) {
+                        // Interrupted by a newer tap
+                    } catch (e: Throwable) {
+                        _state.value = _state.value.copy(
+                            usingNeuralVoice = false,
+                            errorMessage = "法语神经语音合成失败（${e.message}），已自动回退系统 TTS。"
+                        )
+                        speakFrenchWithSystem(cleaned, rateOverride)
+                    } finally {
+                        _state.value = _state.value.copy(isSpeaking = false)
+                    }
+                }
+                return null
+            }
+        }
+
+        // 2. Fall back to Android system offline French TTS
+        return speakFrenchWithSystem(cleaned, rateOverride)
+    }
+
+    /** Only French voices (accent "fr-FR"), medium quality first. */
+    private fun pickBestFrenchNeuralVoice(
+        installed: List<InstalledNeuralVoice>
+    ): InstalledNeuralVoice? {
+        val matching = installed.filter { it.item.accent == "fr-FR" }
+        return matching.firstOrNull { it.item.id.contains("medium") }
+            ?: matching.firstOrNull()
+    }
+
+    private fun speakFrenchWithSystem(
+        cleaned: String,
+        rateOverride: Float?
+    ): String? {
+        synchronized(lock) {
+            if (systemTts == null || (!_state.value.isInitialized && isInitializingSystemTts)) {
+                ensureInitialized()
+                return "法语语音引擎正在初始化，请稍后再试一次。"
+            }
+            if (!_state.value.isReady) {
+                return _state.value.errorMessage ?: "语音引擎尚未就绪，可在「词库」页下载离线法语神经语音包。"
+            }
+            applyFrenchSystemConfig(rateOverride ?: savedRate)
+            val engine = systemTts ?: return "语音引擎尚未就绪。"
+            engine.stop()
+            engine.speak(cleaned, TextToSpeech.QUEUE_FLUSH, null, UUID.randomUUID().toString())
+            return null
+        }
+    }
+
+    private fun applyFrenchSystemConfig(rate: Float) {
+        val engine = systemTts ?: return
+        val availability = engine.setLanguage(Locale.FRENCH)
+
+        val exactOffline = engine.voices?.firstOrNull { v ->
+            v.locale.language.equals("fr", ignoreCase = true) && !v.isNetworkConnectionRequired
+        }
+        if (exactOffline != null) {
+            engine.voice = exactOffline
+        }
+
+        engine.setSpeechRate(rate.coerceIn(0.5f, 1.5f))
+        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
+                _state.value = _state.value.copy(isSpeaking = true)
+            }
+
+            override fun onDone(utteranceId: String?) {
+                _state.value = _state.value.copy(isSpeaking = false)
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                _state.value = _state.value.copy(isSpeaking = false)
+            }
+
+            override fun onError(utteranceId: String?, errorCode: Int) {
+                _state.value = _state.value.copy(
+                    isSpeaking = false,
+                    errorMessage = "系统法语朗读出错 (code=$errorCode)，建议在「词库」页下载离线法语神经语音包。"
+                )
+            }
+        })
+
+        val ready = availability != TextToSpeech.LANG_MISSING_DATA &&
+            availability != TextToSpeech.LANG_NOT_SUPPORTED
+        _state.value = _state.value.copy(
+            isInitialized = true,
+            isReady = ready,
+            activeAccent = "fr-FR",
+            errorMessage = if (!ready && _state.value.installedNeuralVoicesCount == 0) {
+                "未检测到系统法语离线语音包，建议在「词库」页下载离线法语神经语音包。"
+            } else {
+                null
+            }
+        )
+    }
+
     private fun speakWithSystemFallback(
         cleaned: String,
         accentOverride: String?,
